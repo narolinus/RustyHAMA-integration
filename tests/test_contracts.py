@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 import voluptuous as vol
 
+from custom_components.rustyhama.api import PanelJavaScriptView
 from custom_components.rustyhama.merge import merge_patch, redact_secrets
 from custom_components.rustyhama.protocol import envelope, validate_message
 from custom_components.rustyhama.schema import DashboardValidationError, validate_dashboard
@@ -38,3 +39,7 @@ def test_dashboard_validation() -> None:
 def test_secret_redaction_is_recursive() -> None:
     value = redact_secrets({"provider": {"api_key": "secret", "name": "photos"}})
     assert value == {"provider": {"api_key": "**REDACTED**", "name": "photos"}}
+
+
+def test_panel_module_can_be_loaded_without_auth_header() -> None:
+    assert PanelJavaScriptView.requires_auth is False

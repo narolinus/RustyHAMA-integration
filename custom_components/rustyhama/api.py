@@ -138,6 +138,7 @@ class PanelJavaScriptView(HomeAssistantView):
 
     url = f"{PANEL_PATH}/panel.js"
     name = "api:rustyhama:frontend"
+    requires_auth = False
 
     async def get(self, request: web.Request) -> web.Response:
         path = Path(__file__).parent / "frontend" / "panel.js"
