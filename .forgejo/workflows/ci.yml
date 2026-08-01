@@ -34,7 +34,11 @@ jobs:
         run: |
           apt-get update
           apt-get install -y docker.io
-      - uses: https://github.com/home-assistant/actions/hassfest@master
-      - uses: https://github.com/hacs/action@main
-        with:
-          category: integration
+      - name: Hassfest
+        run: |
+          VALIDATOR_ID="$(docker create ghcr.io/home-assistant/hassfest:latest)"
+          trap 'docker rm -f "$VALIDATOR_ID" >/dev/null 2>&1 || true' EXIT
+          docker cp . "$VALIDATOR_ID:/github/workspace"
+          docker start --attach "$VALIDATOR_ID"
+      - name: HACS metadata and archive validation
+        run: python3 scripts/check_hacs.py
