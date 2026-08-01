@@ -23,5 +23,13 @@ jobs:
           set -eu
           test -n "$GH_MIRROR_TOKEN"
           git remote add github "https://x-access-token:${GH_MIRROR_TOKEN}@github.com/narolinus/RustyHAMA-integration.git"
-          git push github "${GITHUB_SHA}:refs/heads/main"
+          git fetch github main
+          if git merge-base --is-ancestor "${FORGEJO_SHA}" refs/remotes/github/main; then
+            echo "GitHub main already contains the tagged commit."
+          elif git merge-base --is-ancestor refs/remotes/github/main "${FORGEJO_SHA}"; then
+            git push github "${FORGEJO_SHA}:refs/heads/main"
+          else
+            echo "Forgejo and GitHub main have diverged; refusing to overwrite either history." >&2
+            exit 1
+          fi
           git push github "refs/tags/${GITHUB_REF_NAME}"

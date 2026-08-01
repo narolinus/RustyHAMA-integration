@@ -1,33 +1,14 @@
 name: CI
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
-  test:
+  hacs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
-          cache: pip
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - run: pip install -e '.[test]'
-      - run: ruff check .
-      - run: mypy custom_components/rustyhama
-      - run: pytest
-      - run: node --test tests/frontend.test.mjs
-      - run: python scripts/check_docs.py
-      - run: zensical build --clean --strict
-      - run: zensical build --config-file zensical.en.toml --clean --strict
-      - run: zensical build --config-file zensical.fr.toml --clean --strict
-      - run: python scripts/copy_docs_assets.py
-
-  hassfest:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: home-assistant/actions/hassfest@master
+      - name: HACS metadata and archive validation
+        run: python3 scripts/check_hacs.py
