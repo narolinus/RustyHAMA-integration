@@ -18,6 +18,10 @@ test = [
   "zensical>=0.0.10"
 ]
 
+[tool.setuptools.packages.find]
+include = ["custom_components*"]
+namespaces = true
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
