@@ -10,7 +10,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Verify tag and manifest version
         run: |
           set -eu
@@ -23,7 +23,7 @@ jobs:
           set -eu
           find custom_components/rustyhama -type d -name __pycache__ -prune -exec rm -rf {} +
           find custom_components/rustyhama -type f -print0 | LC_ALL=C sort -z | xargs -0 touch -t 198001010000
-          (cd custom_components/rustyhama && zip -X -r ../../../rustyhama.zip .)
+          (cd custom_components/rustyhama && zip -X -r ../../rustyhama.zip .)
           unzip -t rustyhama.zip
       - uses: softprops/action-gh-release@v2
         with:
