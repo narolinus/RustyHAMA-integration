@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://daniel.snii.de/RustyHAMA-Integration/schemas/protocol-v1.schema.json",
+  "title": "RustyHAMA protocol envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "id", "type", "timestamp", "revision", "payload"],
+  "properties": {
+    "version": {"const": 1},
+    "id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "type": {"type": "string", "minLength": 1, "maxLength": 128},
+    "timestamp": {"type": "string", "minLength": 1},
+    "revision": {"type": "integer", "minimum": 0},
+    "payload": {"type": "object"}
+  }
+}

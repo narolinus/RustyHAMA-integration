@@ -1,0 +1,27 @@
+[project]
+site_name = "RustyHAMA Integration"
+site_url = "https://daniel.snii.de/RustyHAMA-Integration/en/"
+docs_dir = "docs/en"
+site_dir = "site/en"
+nav = [
+  {"Home" = "index.md"},
+  {"Installation and pairing" = "installation-pairing.md"},
+  {"Configuration and editor" = "configuration-editor.md"},
+  {"Entities and actions" = "entities-actions.md"},
+  {"Feature modules" = "modules.md"},
+  {"Protocol and security" = "protocol-security.md"},
+  {"Operations and troubleshooting" = "operations.md"},
+  {"Development and releases" = "development-release.md"}
+]
+[project.extra]
+alternate = [
+  {name="Deutsch", link="/RustyHAMA-Integration/", lang="de"},
+  {name="English", link="/RustyHAMA-Integration/en/", lang="en"},
+  {name="Français", link="/RustyHAMA-Integration/fr/", lang="fr"}
+]
+[project.theme]
+language = "en"
+features = ["navigation.sections", "navigation.top", "content.code.copy"]
+[project.markdown_extensions.tables]
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.pymdownx.superfences]

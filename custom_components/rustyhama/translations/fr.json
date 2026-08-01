@@ -1,0 +1,7 @@
+{
+  "title": "RustyHAMA",
+  "config": {
+    "step": {"user": {"title": "Configurer RustyHAMA", "description": "Créez le service RustyHAMA. Associez ensuite les appareils depuis le panneau RustyHAMA."}},
+    "abort": {"single_instance_allowed": "RustyHAMA est déjà configuré.", "use_pairing_panel": "Associez les appareils en toute sécurité depuis le panneau RustyHAMA."}
+  }
+}

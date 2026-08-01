@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rustyhama-integration"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = ["homeassistant>=2026.7.0,<2026.8"]
+
+[project.optional-dependencies]
+test = [
+  "mypy>=1.17",
+  "pytest>=8.4",
+  "pytest-asyncio>=1.1",
+  "pytest-homeassistant-custom-component>=0.13.280",
+  "ruff>=0.12",
+  "zensical>=0.0.10"
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
+ignore = ["E501", "ASYNC109"]
+
+[tool.mypy]
+python_version = "3.14"
+check_untyped_defs = true
+disallow_untyped_defs = true
+disable_error_code = ["call-arg", "misc", "no-any-return", "untyped-decorator"]
+packages = ["custom_components.rustyhama"]
+
+[[tool.mypy.overrides]]
+module = ["homeassistant.*"]
+ignore_missing_imports = true

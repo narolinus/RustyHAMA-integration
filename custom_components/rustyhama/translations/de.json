@@ -1,0 +1,7 @@
+{
+  "title": "RustyHAMA",
+  "config": {
+    "step": {"user": {"title": "RustyHAMA einrichten", "description": "Lege den RustyHAMA-Dienst an. Geräte werden anschließend im RustyHAMA-Panel gekoppelt."}},
+    "abort": {"single_instance_allowed": "RustyHAMA ist bereits eingerichtet.", "use_pairing_panel": "Kopple Geräte sicher über das RustyHAMA-Panel."}
+  }
+}

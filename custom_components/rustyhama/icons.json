@@ -1,0 +1,8 @@
+{
+  "services": {
+    "send_notification": "mdi:message-badge",
+    "set_active_tab": "mdi:tab",
+    "set_screensaver": "mdi:monitor-shimmer",
+    "reload_configuration": "mdi:reload"
+  }
+}

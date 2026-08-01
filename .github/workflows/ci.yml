@@ -1,0 +1,40 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: pip install -e '.[test]'
+      - run: ruff check .
+      - run: mypy custom_components/rustyhama
+      - run: pytest
+      - run: node --test tests/frontend.test.mjs
+      - run: python scripts/check_docs.py
+      - run: zensical build --clean --strict
+      - run: zensical build --config-file zensical.en.toml --clean --strict
+      - run: zensical build --config-file zensical.fr.toml --clean --strict
+
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: integration

@@ -1,0 +1,31 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify tag and manifest version
+        run: |
+          set -eu
+          VERSION="${GITHUB_REF_NAME#v}"
+          python -c 'import json,os; expected=os.environ["VERSION"]; actual=json.load(open("custom_components/rustyhama/manifest.json"))["version"]; assert actual == expected, (actual, expected)'
+        env:
+          VERSION: ${{ github.ref_name }}
+      - name: Build reproducible HACS archive
+        run: |
+          set -eu
+          find custom_components/rustyhama -type d -name __pycache__ -prune -exec rm -rf {} +
+          find custom_components/rustyhama -type f -print0 | LC_ALL=C sort -z | xargs -0 touch -t 198001010000
+          (cd custom_components/rustyhama && zip -X -r ../../../rustyhama.zip .)
+          unzip -t rustyhama.zip
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: rustyhama.zip
+          generate_release_notes: true

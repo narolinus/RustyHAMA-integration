@@ -1,0 +1,56 @@
+send_notification:
+  fields:
+    device_id:
+      required: true
+      selector:
+        text:
+    title:
+      selector:
+        text:
+    message:
+      required: true
+      selector:
+        text:
+          multiline: true
+    duration_ms:
+      selector:
+        number:
+          min: 0
+          max: 600000
+          mode: box
+    play_sound:
+      selector:
+        boolean:
+set_active_tab:
+  fields:
+    device_id:
+      required: true
+      selector:
+        text:
+    index:
+      selector:
+        number:
+          min: 0
+          max: 100
+          mode: box
+    tab_id:
+      selector:
+        text:
+set_screensaver:
+  target: {}
+  fields:
+    device_id:
+      required: true
+      selector:
+        text:
+    state:
+      required: true
+      selector:
+        select:
+          options: ["on", "off", "toggle"]
+reload_configuration:
+  fields:
+    device_id:
+      required: true
+      selector:
+        text:

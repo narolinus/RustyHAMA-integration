@@ -1,0 +1,5 @@
+[
+  {"name":"recursive-object","profile":{"a":{"b":1,"c":2}},"patch":{"a":{"b":3}},"result":{"a":{"b":3,"c":2}}},
+  {"name":"replace-array","profile":{"items":[1,2]},"patch":{"items":[3]},"result":{"items":[3]}},
+  {"name":"delete-null","profile":{"a":1,"b":2},"patch":{"a":null},"result":{"b":2}}
+]

@@ -1,0 +1,15 @@
+{
+  "title": "RustyHAMA",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up RustyHAMA",
+        "description": "Create the RustyHAMA service. Pair devices from the RustyHAMA panel afterwards."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "RustyHAMA is already configured.",
+      "use_pairing_panel": "Pair devices securely from the RustyHAMA panel."
+    }
+  }
+}

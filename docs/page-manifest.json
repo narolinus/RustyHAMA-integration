@@ -1,0 +1,12 @@
+{
+  "pages": [
+    "index.md",
+    "installation-pairing.md",
+    "configuration-editor.md",
+    "entities-actions.md",
+    "modules.md",
+    "protocol-security.md",
+    "operations.md",
+    "development-release.md"
+  ]
+}

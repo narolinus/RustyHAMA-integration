@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://daniel.snii.de/RustyHAMA-Integration/schemas/dashboard-v1.schema.json",
+  "title": "RustyHAMA dashboard v1",
+  "type": "object",
+  "required": ["schema_version", "tabs"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "theme": {"type": ["string", "object"]},
+    "tabs": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "required": ["id", "widgets"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "title": {"type": "string"},
+          "columns": {"type": "integer", "minimum": 1},
+          "widgets": {
+            "type": "array",
+            "items": {
+              "type": "object", "required": ["id", "type"],
+              "properties": {
+                "id": {"type": "string", "minLength": 1},
+                "type": {"type": "string", "minLength": 1}
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

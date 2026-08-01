@@ -1,0 +1,46 @@
+name: Publish documentation and mirror tag
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    runs-on: docker
+    container: python:3.14
+    steps:
+      - uses: https://github.com/actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: pip install zensical
+      - name: Verify version
+        run: |
+          set -eu
+          VERSION="${GITHUB_REF_NAME#v}"
+          python -c 'import json,os; assert json.load(open("custom_components/rustyhama/manifest.json"))["version"] == os.environ["VERSION"]'
+        env:
+          VERSION: ${{ forgejo.ref_name }}
+      - name: Build documentation
+        run: |
+          python scripts/check_docs.py
+          zensical build --clean --strict
+          zensical build --config-file zensical.en.toml --clean --strict
+          zensical build --config-file zensical.fr.toml --clean --strict
+          mkdir -p site
+          touch site/.nojekyll
+      - name: Publish documentation
+        uses: https://codeberg.org/git-pages/action@v2
+        with:
+          site: "https://daniel.snii.de/RustyHAMA-Integration/"
+          token: "${{ forgejo.token }}"
+          source: "site/"
+      - name: Mirror commit and tag to GitHub
+        env:
+          GITHUB_MIRROR_TOKEN: ${{ secrets.GITHUB_MIRROR_TOKEN }}
+          GITHUB_MIRROR_REPOSITORY: ${{ secrets.GITHUB_MIRROR_REPOSITORY }}
+        run: |
+          set -eu
+          test -n "$GITHUB_MIRROR_TOKEN"
+          test -n "$GITHUB_MIRROR_REPOSITORY"
+          git remote add github "https://x-access-token:${GITHUB_MIRROR_TOKEN}@github.com/${GITHUB_MIRROR_REPOSITORY}.git"
+          git push github "${GITHUB_SHA}:refs/heads/main"
+          git push github "refs/tags/${GITHUB_REF_NAME}"
