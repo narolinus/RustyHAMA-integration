@@ -1,6 +1,6 @@
-# Entities und Actions
+# Entities und Actions {#entities-und-actions}
 
-## Geräte-Entities
+## Geräte-Entities {#gerate-entities}
 
 Jedes Gerät besitzt ein echtes `assist_satellite.*`. Für aktivierte Kameras entstehen `camera.*`; `media_player.*` ist vorhanden, aber standardmäßig deaktiviert. Laufzeitnahe Einstellungen tragen `EntityCategory.CONFIG`, Diagnosewerte `EntityCategory.DIAGNOSTIC`.
 
@@ -8,7 +8,7 @@ Standardmäßig aktive Sensoren umfassen Batterie, Laden, Stromquelle, WLAN-Sign
 
 Switches, Numbers und Selects steuern unter anderem Profil, Helligkeit, Bildschirmbetrieb, Voice/Wakeword, VAD, Audioweg, Screensaver, Kamera-FPS/Qualität/Auflösung/Transport, MediaPlayer und Sensorintervall. Buttons laden die Konfiguration neu, wecken den Bildschirm oder starten den Dienst neu.
 
-## Eigene Actions
+## Eigene Actions {#eigene-actions}
 
 | Action | Zweck |
 |---|---|

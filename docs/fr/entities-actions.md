@@ -1,6 +1,6 @@
-# Entités et actions
+# Entités et actions {#entites-et-actions}
 
-## Entités de l’appareil
+## Entités de l’appareil {#entites-de-lappareil}
 
 Chaque appareil possède un véritable `assist_satellite.*`. Les caméras activées créent `camera.*` ; `media_player.*` existe mais reste désactivé par défaut. Les réglages d’exécution utilisent `EntityCategory.CONFIG`, les diagnostics `EntityCategory.DIAGNOSTIC`.
 
@@ -8,7 +8,7 @@ Les capteurs actifs couvrent batterie, charge, source électrique, signal Wi-Fi,
 
 Interrupteurs, nombres et sélections règlent profil, luminosité, écran, voix/mot de réveil, VAD, route audio, économiseur, FPS/qualité/résolution/transport caméra, lecteur multimédia et intervalle des capteurs. Les boutons rechargent la configuration, réveillent l’écran ou redémarrent le service.
 
-## Actions propres
+## Actions propres {#actions-propres}
 
 | Action | Fonction |
 |---|---|

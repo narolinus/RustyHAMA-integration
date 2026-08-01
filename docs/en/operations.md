@@ -1,10 +1,10 @@
-# Operations and troubleshooting
+# Operations and troubleshooting {#operations-and-troubleshooting}
 
-## Normal operation
+## Normal operation {#normal-operation}
 
 The Android foreground service starts after boot by default and keeps the device channel, voice, camera and media active. Without HA, the app continues with its last acknowledged configuration; HA-dependent controls show unavailable. In HA, `config_revision` and `acknowledged_revision` compare desired and confirmed state.
 
-## Diagnostic sequence
+## Diagnostic sequence {#diagnostic-sequence}
 
 1. Check online/last seen and service status on the HA device.
 2. Compare configuration revision and device acknowledgement.
@@ -13,7 +13,7 @@ The Android foreground service starts after boot by default and keeps the device
 5. For voice, check microphone permission, pipeline, STT/TTS and VAD.
 6. For camera, check facing, selected resolution, FPS, LAN reachability and transport.
 
-## Common failures
+## Common failures {#common-failures}
 
 | Symptom | Cause and action |
 |---|---|
@@ -24,6 +24,6 @@ The Android foreground service starts after boot by default and keeps the device
 | Assist remains listening | check audio format, stream end, VAD and STT pipeline |
 | Camera does not load | verify direct HTTPS route or select tunnel transport |
 
-## Revocation and recovery
+## Revocation and recovery {#revocation-and-recovery}
 
 Remove a lost device in the panel; this revokes its session, credential, subentry and HA device. Reinstalling the app requires new pairing because backup is disabled. A configuration rollback always creates a new revision and never changes earlier history.

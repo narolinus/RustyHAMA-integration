@@ -3,6 +3,7 @@ site_name = "RustyHAMA Integration"
 site_url = "https://daniel.snii.de/RustyHAMA-Integration/en/"
 docs_dir = "docs/en"
 site_dir = "site/en"
+extra_css = ["assets/stylesheets/extra.css"]
 nav = [
   {"Home" = "index.md"},
   {"Installation and pairing" = "installation-pairing.md"},
@@ -23,5 +24,6 @@ alternate = [
 language = "en"
 features = ["navigation.sections", "navigation.top", "content.code.copy"]
 [project.markdown_extensions.tables]
+[project.markdown_extensions.attr_list]
 [project.markdown_extensions.admonition]
 [project.markdown_extensions.pymdownx.superfences]

@@ -1,6 +1,6 @@
-# Entities and actions
+# Entities and actions {#entities-and-actions}
 
-## Device entities
+## Device entities {#device-entities}
 
 Every device has a real `assist_satellite.*`. Enabled cameras create `camera.*`; `media_player.*` exists but is disabled by default. Runtime settings use `EntityCategory.CONFIG`, diagnostics use `EntityCategory.DIAGNOSTIC`.
 
@@ -8,7 +8,7 @@ Enabled sensors cover battery, charging, power source, Wi-Fi signal, network and
 
 Switches, numbers and selects control profile, brightness, screen behavior, voice/wake word, VAD, audio route, screensaver, camera FPS/quality/resolution/transport, media player and sensor interval. Buttons reload configuration, wake the screen or restart the service.
 
-## Custom actions
+## Custom actions {#custom-actions}
 
 | Action | Purpose |
 |---|---|

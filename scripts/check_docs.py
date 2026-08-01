@@ -14,6 +14,8 @@ LANGUAGES = ("de", "en", "fr")
 FORBIDDEN = re.compile(r"\b(?:TODO|TBD|FIXME|STUB|FALLBACK)\b", re.IGNORECASE)
 CODE_FIELD = re.compile(r'"([a-z][a-z0-9_.-]+)"\s*:')
 LINK = re.compile(r"\[[^]]+\]\((?!https?://|#)([^)]+)\)")
+HEADING = re.compile(r"^(#{1,6})\s+.+?\s+\{#([^}]+)\}\s*$")
+ANCHOR = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
 def fail(message: str) -> None:
@@ -30,6 +32,24 @@ for language in LANGUAGES:
     )
     if actual != sorted(pages):
         fail(f"{language}: page manifest mismatch: {actual}")
+    for path in (DOCS / language).rglob("*.md"):
+        anchors: set[str] = set()
+        in_fence = False
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if line.lstrip().startswith("```"):
+                in_fence = not in_fence
+                continue
+            if in_fence or not line.startswith("#"):
+                continue
+            match = HEADING.fullmatch(line)
+            if not match:
+                fail(f"{language}/{path.relative_to(DOCS / language)}:{number}: missing explicit ASCII anchor")
+            anchor = match.group(2)
+            if not ANCHOR.fullmatch(anchor):
+                fail(f"{language}/{path.relative_to(DOCS / language)}:{number}: invalid anchor {anchor}")
+            if anchor in anchors:
+                fail(f"{language}/{path.relative_to(DOCS / language)}:{number}: duplicate anchor {anchor}")
+            anchors.add(anchor)
 
 for page in pages:
     texts = {

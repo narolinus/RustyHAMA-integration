@@ -25,6 +25,7 @@ jobs:
           zensical build --clean --strict
           zensical build --config-file zensical.en.toml --clean --strict
           zensical build --config-file zensical.fr.toml --clean --strict
+          python scripts/copy_docs_assets.py
           mkdir -p site
           touch site/.nojekyll
       - name: Publish documentation

@@ -1,10 +1,10 @@
-# RustyHAMA-Integration
+# RustyHAMA-Integration {#rustyhama-integration}
 
 RustyHAMA verbindet Android-Wandtablets ab API 17 als native Geräte mit Home Assistant 2026.7 oder neuer. Die Integration ist die zentrale Quelle für Dashboards, Profile, Geräteeinstellungen, Provider-Zugänge und Befehle. Ein Tablet erhält kein allgemeines Home-Assistant-Benutzertoken und niemals einen Provider-Key.
 
 Jedes gekoppelte Tablet wird als eigene Config-Subentry und als HA-Gerät registriert. Der am Gerät gewählte HA-Bereich ist zugleich der Raumkontext des Assist Satellite. Die Integration stellt Assist Satellite, optionale Kameras und MediaPlayer sowie Sensor-, Binary-Sensor-, Switch-, Number-, Select- und Button-Entities bereit.
 
-## Leitprinzipien
+## Leitprinzipien {#leitprinzipien}
 
 | Prinzip | Umsetzung |
 |---|---|
@@ -14,7 +14,7 @@ Jedes gekoppelte Tablet wird als eigene Config-Subentry und als HA-Gerät regist
 | Geringe Rechte | Nur benötigte States und typisierte, serverseitig erlaubte Operationen |
 | Gleichwertige Doku | Deutsch, Englisch und Französisch mit identischer Seitenstruktur |
 
-## Einstieg
+## Einstieg {#einstieg}
 
 Beginne mit [Installation und Pairing](installation-pairing.md). Die Konfiguration wird unter [Konfiguration und Editor](configuration-editor.md) erklärt. Für einen Fehlerfall helfen [Betrieb und Fehlersuche](operations.md) und die Diagnoseausgabe der Integration.
 

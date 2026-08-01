@@ -24,6 +24,7 @@ jobs:
       - run: zensical build --clean --strict
       - run: zensical build --config-file zensical.en.toml --clean --strict
       - run: zensical build --config-file zensical.fr.toml --clean --strict
+      - run: python scripts/copy_docs_assets.py
 
   hassfest:
     runs-on: ubuntu-latest

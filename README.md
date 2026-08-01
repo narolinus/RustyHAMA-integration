@@ -11,4 +11,5 @@ supported by the device protocol.
 
 Complete and equally maintained documentation is available in
 [Deutsch](docs/de/index.md), [English](docs/en/index.md) and
-[Français](docs/fr/index.md).
+[Français](docs/fr/index.md). All editions live below `docs/` and share the
+single asset tree in `docs/assets/`.
