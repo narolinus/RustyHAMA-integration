@@ -7,23 +7,28 @@ on:
 jobs:
   publish:
     runs-on: docker
-    container: python:3.14
+    container: node:22-bookworm
     steps:
       - uses: https://github.com/actions/checkout@v4
         with:
           fetch-depth: 0
-      - run: pip install zensical
+      - name: Install documentation tooling
+        run: |
+          set -eu
+          apt-get update
+          apt-get install -y --no-install-recommends python3 python3-pip
+          python3 -m pip install --break-system-packages zensical
       - name: Verify version
         if: startsWith(forgejo.ref, 'refs/tags/v')
         run: |
           set -eu
           VERSION="${GITHUB_REF_NAME#v}"
-          python -c 'import json,os; assert json.load(open("custom_components/rustyhama/manifest.json"))["version"] == os.environ["VERSION"]'
+          python3 -c 'import json,os; assert json.load(open("custom_components/rustyhama/manifest.json"))["version"] == os.environ["VERSION"]'
         env:
           VERSION: ${{ forgejo.ref_name }}
       - name: Build documentation
         run: |
-          python scripts/check_docs.py
+          python3 scripts/check_docs.py
           zensical build --clean --strict
           zensical build --config-file zensical.en.toml --clean --strict
           zensical build --config-file zensical.fr.toml --clean --strict
