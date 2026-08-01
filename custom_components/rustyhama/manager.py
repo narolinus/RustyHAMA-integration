@@ -29,6 +29,7 @@ from .const import (
     SIGNAL_DEVICES_CHANGED,
     SUBENTRY_TYPE_DEVICE,
 )
+from .dashboard_compiler import Compilation, DashboardCompiler
 from .models import DeviceRecord, DeviceSession, PairingRequest, utc_iso
 from .protocol import envelope, validate_message
 from .storage import RustyStorage
@@ -77,6 +78,9 @@ class RustyManager:
         self.sessions: dict[str, DeviceSession] = {}
         self.streams: dict[str, asyncio.Queue[bytes | None]] = {}
         self._pending_acks: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self.compiler = DashboardCompiler(hass)
+        self._compiled: dict[str, Compilation] = {}
+        self._refresh_tasks: dict[str, asyncio.Task[None]] = {}
 
     async def async_setup(self) -> None:
         """Load state."""
@@ -186,7 +190,7 @@ class RustyManager:
             "device_id": device_id,
             "credential": credential,
             "config_revision": device.config_revision,
-            "config": self.storage.effective_config(device),
+            "config": self._compile(device).config,
         }
 
     def authenticate(self, device_id: str, credential: str) -> DeviceRecord | None:
@@ -209,18 +213,19 @@ class RustyManager:
         session = DeviceSession(device.device_id, websocket, device.session_generation)
         self.sessions[device.device_id] = session
         await self.storage.async_save()
+        compilation = self._compile(device)
         await websocket.send_json(
             envelope(
                 "hello",
                 {
                     "session_generation": session.generation,
-                    "config": self.storage.effective_config(device),
+                    "config": compilation.config,
                 },
                 revision=device.config_revision,
             )
         )
         await websocket.send_json(
-            envelope("states", {"states": self._initial_states(device)})
+            envelope("states", {"states": self._initial_states(compilation)})
         )
         self._signal_device(device.device_id)
         return session
@@ -231,6 +236,9 @@ class RustyManager:
         if current is not session:
             return
         self.sessions.pop(session.device_id, None)
+        refresh = self._refresh_tasks.pop(session.device_id, None)
+        if refresh is not None:
+            refresh.cancel()
         device = self.storage.devices.get(session.device_id)
         if device:
             device.online = False
@@ -311,19 +319,27 @@ class RustyManager:
         finally:
             self._pending_acks.pop(message["id"], None)
 
-    async def async_push_configuration(self, device_id: str) -> None:
-        """Send the latest effective configuration without offline replay."""
+    async def async_push_configuration(self, device_id: str, *, force: bool = True) -> bool:
+        """Send a compiled configuration and its narrow state projection."""
         device = self.storage.devices[device_id]
         session = self.sessions.get(device_id)
         if session is None or session.websocket.closed:
-            return
+            return False
+        previous = self._compiled.get(device_id)
+        compilation = self._compile(device)
+        if not force and previous is not None and previous.fingerprint == compilation.fingerprint:
+            return False
         await session.websocket.send_json(
             envelope(
                 "configuration",
-                {"config": self.storage.effective_config(device)},
+                {"config": compilation.config},
                 revision=device.config_revision,
             )
         )
+        await session.websocket.send_json(
+            envelope("states", {"states": self._initial_states(compilation)})
+        )
+        return True
 
     async def async_update_device_config(
         self, device_id: str, patch: dict[str, Any]
@@ -359,6 +375,10 @@ class RustyManager:
     async def async_remove_device(self, device_id: str) -> None:
         """Revoke a device and remove its subentry."""
         device = self.storage.devices.pop(device_id)
+        self._compiled.pop(device_id, None)
+        refresh = self._refresh_tasks.pop(device_id, None)
+        if refresh is not None:
+            refresh.cancel()
         session = self.sessions.pop(device_id, None)
         if session and not session.websocket.closed:
             await session.websocket.close(code=4003, message=b"revoked")
@@ -419,29 +439,22 @@ class RustyManager:
         async_dispatcher_send(self.hass, SIGNAL_DEVICE_UPDATED, device_id)
 
     def allowed_entities(self, device: DeviceRecord) -> set[str]:
-        """Extract entity references from the effective dashboard."""
-        found: set[str] = set()
+        """Return only the entities selected by the compiled dashboard."""
+        compilation = self._compiled.get(device.device_id)
+        if compilation is None:
+            compilation = self._compile(device)
+        return set(compilation.entity_ids)
 
-        def visit(value: Any, key: str = "") -> None:
-            if isinstance(value, dict):
-                for child_key, child in value.items():
-                    visit(child, child_key)
-            elif isinstance(value, list):
-                for child in value:
-                    visit(child, key)
-            elif isinstance(value, str) and (
-                key in {"entity", "entity_id"}
-                or ("." in value and value.split(".", 1)[0] in ALLOWED_SERVICES)
-            ):
-                found.add(value)
+    def _compile(self, device: DeviceRecord) -> Compilation:
+        """Compile a fresh view model; callers decide whether to deploy it."""
+        compilation = self.compiler.compile(self.storage.effective_config(device), device.area_id)
+        self._compiled[device.device_id] = compilation
+        return compilation
 
-        visit(self.storage.effective_config(device))
-        return found
-
-    def _initial_states(self, device: DeviceRecord) -> list[dict[str, Any]]:
+    def _initial_states(self, compilation: Compilation) -> list[dict[str, Any]]:
         return [
             state.as_dict()
-            for entity_id in sorted(self.allowed_entities(device))
+            for entity_id in sorted(compilation.entity_ids)
             if (state := self.hass.states.get(entity_id)) is not None
         ]
 
@@ -452,10 +465,34 @@ class RustyManager:
             return
         for device_id, session in tuple(self.sessions.items()):
             device = self.storage.devices.get(device_id)
-            if device and entity_id in self.allowed_entities(device) and not session.websocket.closed:
+            compilation = self._compiled.get(device_id)
+            if device is None:
+                continue
+            if compilation is None:
+                compilation = self._compile(device)
+            if entity_id in compilation.entity_ids and not session.websocket.closed:
                 await session.websocket.send_json(
                     envelope("state", {"state": new_state.as_dict()})
                 )
+            if compilation.dynamic:
+                self._schedule_dashboard_refresh(device_id)
+
+    def _schedule_dashboard_refresh(self, device_id: str) -> None:
+        """Coalesce global query re-evaluation after bursts of state events."""
+        pending = self._refresh_tasks.get(device_id)
+        if pending is not None and not pending.done():
+            return
+
+        async def refresh() -> None:
+            try:
+                await asyncio.sleep(0.25)
+                await self.async_push_configuration(device_id, force=False)
+            except (ConnectionError, KeyError):
+                return
+            finally:
+                self._refresh_tasks.pop(device_id, None)
+
+        self._refresh_tasks[device_id] = self.hass.async_create_task(refresh())
 
     async def _async_entity_action(
         self, device: DeviceRecord, message: dict[str, Any]

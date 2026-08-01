@@ -16,6 +16,10 @@ Der optionale Android-MediaPlayer unterstützt URL/TTS, Play/Pause/Stop, Seek, L
 
 Mehrere benannte Immich- und Music-Assistant-Verbindungen sind möglich. Provider-Secrets liegen ausschließlich im privaten HA-Storage, werden in Diagnoseausgaben redigiert und niemals an Android gesendet. Immich-Suche und Medienabruf erfolgen serverseitig. Music Assistant nutzt primär dessen offizielle HA-Integration, Entities und Actions; nur fehlende Bestandsfunktionen gehören in einen eng begrenzten Serveradapter.
 
+## Serverseitige Dashboard-Compilation {#serverseitige-dashboard-compilation}
+
+Die Integration löst `auto-entities` vor der Übertragung auf. Include-, Exclude-, Bereichs-, Geräte-, Integrations-, Label-, State-, Attribut-, Glob- und Regex-Regeln sowie Sortierung laufen in HA; das Android-Gerät erhält nur die fertig sortierte `entities`-Liste und deren States. Bei State-Änderungen werden dynamische Abfragen für ein Gerät über 250 ms zusammengefasst neu ausgewertet. Ändert sich das Ergebnis, erhält das Gerät die aktualisierte Konfiguration und einen frischen, minimalen State-Snapshot. Ohne Änderung bleibt der Kontrollkanal ruhig. Offline rendert Android die zuletzt erfolgreich aktivierte Liste.
+
 ## Dashboard-Parität {#dashboard-paritat}
 
 Unterstützt bleiben Themes, Tabs, Badges, Bedingungen, verschachtelte Grids, Graphen, Kalenderänderungen, Mediengruppen, Screensaver, Immich-Ansichten, Music-Assistant-Tab, Voice-Button und HA-State-Steuerung sowie alle dokumentierten Widgetfamilien und Aliase der App.

@@ -9,7 +9,7 @@
 
 ## Installation HACS {#installation-hacs}
 
-Ouvrez HACS, ajoutez le dépôt GitHub public comme dépôt personnalisé de type « Intégration », installez RustyHAMA et redémarrez Home Assistant. Ajoutez ensuite **RustyHAMA** dans **Paramètres → Appareils et services**. L’entrée de service n’existe qu’une fois ; les appareils sont ajoutés depuis le panneau latéral.
+Ouvrez HACS, ajoutez [`narolinus/RustyHAMA-integration`](https://github.com/narolinus/RustyHAMA-integration) comme dépôt personnalisé de type « Intégration », installez RustyHAMA et redémarrez Home Assistant. Ajoutez ensuite **RustyHAMA** dans **Paramètres → Appareils et services**. L’entrée de service n’existe qu’une fois ; les appareils sont ajoutés depuis le panneau latéral.
 
 ## Préparer un appareil {#preparer-un-appareil}
 

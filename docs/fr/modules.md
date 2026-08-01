@@ -16,6 +16,10 @@ Le lecteur Android facultatif prend en charge URL/TTS, lecture/pause/arrêt, rec
 
 Plusieurs connexions nommées Immich et Music Assistant sont possibles. Leurs secrets restent dans le stockage HA privé, sont masqués des diagnostics et ne vont jamais vers Android. Recherche et médias Immich passent côté serveur. Music Assistant utilise d’abord son intégration HA officielle, ses entités et actions ; seules les fonctions existantes manquantes relèvent d’un adaptateur serveur étroit.
 
+## Compilation serveur du tableau de bord {#compilation-serveur-du-tableau-de-bord}
+
+L’intégration résout `auto-entities` avant la transmission. Les règles include, exclude, zone, appareil, intégration, label, état, attribut, glob et expression régulière, ainsi que le tri, s’exécutent dans HA ; Android ne reçoit que la liste `entities` finale triée et ses états. Lors d’un changement d’état, les requêtes dynamiques d’un appareil sont regroupées puis réévaluées sur 250 ms. Si le résultat change, l’appareil reçoit la configuration mise à jour et un instantané d’état minimal actualisé. Sans changement, le canal de contrôle reste silencieux. Hors ligne, Android rend la dernière liste activée avec succès.
+
 ## Parité du tableau de bord {#parite-du-tableau-de-bord}
 
 Thèmes, onglets, badges, conditions, grilles imbriquées, graphiques, modifications de calendrier, groupes multimédias, économiseur, vues Immich, onglet Music Assistant, bouton vocal, contrôle des états HA et toutes les familles et alias documentés de l’application restent disponibles.

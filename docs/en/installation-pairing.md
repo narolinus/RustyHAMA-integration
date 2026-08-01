@@ -9,7 +9,7 @@
 
 ## HACS installation {#hacs-installation}
 
-Open HACS, add the public GitHub repository as a custom repository of type “Integration”, install RustyHAMA, and restart Home Assistant. Then add **RustyHAMA** under **Settings → Devices & services**. The service entry exists once; devices are added in its sidebar panel.
+Open HACS, add [`narolinus/RustyHAMA-integration`](https://github.com/narolinus/RustyHAMA-integration) as a custom repository of type “Integration”, install RustyHAMA, and restart Home Assistant. Then add **RustyHAMA** under **Settings → Devices & services**. The service entry exists once; devices are added in its sidebar panel.
 
 ## Preparing a device {#preparing-a-device}
 
