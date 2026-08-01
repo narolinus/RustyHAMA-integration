@@ -1,41 +1,22 @@
-name: Publish documentation and mirror releases
+name: Mirror releases
 on:
   push:
-    branches: [main]
     tags: ["v*"]
 
 jobs:
-  publish:
+  mirror:
     runs-on: android_build
     steps:
       - uses: https://github.com/actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Verify version
-        if: startsWith(forgejo.ref, 'refs/tags/v')
         run: |
           set -eu
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${FORGEJO_REF_NAME#v}"
+          export VERSION
           python3 -c 'import json,os; assert json.load(open("custom_components/rustyhama/manifest.json"))["version"] == os.environ["VERSION"]'
-        env:
-          VERSION: ${{ forgejo.ref_name }}
-      - name: Build documentation
-        run: |
-          python3 scripts/check_docs.py
-          zensical build --clean --strict
-          zensical build --config-file zensical.en.toml --clean --strict
-          zensical build --config-file zensical.fr.toml --clean --strict
-          python scripts/copy_docs_assets.py
-          mkdir -p site
-          touch site/.nojekyll
-      - name: Publish documentation
-        uses: https://codeberg.org/git-pages/action@v2
-        with:
-          site: "https://daniel.snii.de/RustyHAMA-Integration/"
-          token: "${{ forgejo.token }}"
-          source: "site/"
       - name: Mirror commit and tag to GitHub
-        if: startsWith(forgejo.ref, 'refs/tags/v')
         env:
           GH_MIRROR_TOKEN: ${{ secrets.GH_MIRROR_TOKEN }}
         run: |
