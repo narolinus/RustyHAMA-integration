@@ -5,27 +5,18 @@ on:
 
 jobs:
   test:
-    runs-on: docker
-    container: python:3.14
+    runs-on: android_build
     steps:
-      - name: Checkout and install toolchain
-        run: |
-          apt-get update
-          apt-get install -y git nodejs npm
-          git init
-          git remote add origin "$FORGEJO_SERVER_URL/$FORGEJO_REPOSITORY.git"
-          git fetch --depth 1 origin "$FORGEJO_SHA"
-          git checkout --detach FETCH_HEAD
-          pip install -e '.[test]'
+      - uses: https://github.com/actions/checkout@v4
       - run: ruff check .
       - run: mypy custom_components/rustyhama
       - run: pytest
       - run: node --test tests/frontend.test.mjs
-      - run: python scripts/check_docs.py
+      - run: python3 scripts/check_docs.py
       - run: zensical build --clean --strict
       - run: zensical build --config-file zensical.en.toml --clean --strict
       - run: zensical build --config-file zensical.fr.toml --clean --strict
-      - run: python scripts/copy_docs_assets.py
+      - run: python3 scripts/copy_docs_assets.py
 
   validate-hacs:
     runs-on: docker
