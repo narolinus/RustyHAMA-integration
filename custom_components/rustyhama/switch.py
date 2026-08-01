@@ -7,8 +7,10 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .const import DOMAIN
 from .entity import (
     RustyEntity,
     async_setup_dynamic_entities,
@@ -43,6 +45,17 @@ class RustySwitch(RustyEntity, SwitchEntity):
         await self.manager.async_update_device_config(
             self.device.device_id, nested_patch(self.path, True)
         )
+        if self.entity_key == "camera_enabled":
+            registry = er.async_get(self.hass)
+            for index, camera in enumerate(
+                self.device.capabilities.get("cameras", []) or []
+            ):
+                camera_id = str(camera.get("id", index)) if isinstance(camera, dict) else str(index)
+                entity_id = registry.async_get_entity_id(
+                    "camera", DOMAIN, f"{self.device.device_id}_camera_{camera_id}"
+                )
+                if entity_id is not None:
+                    registry.async_update_entity(entity_id, disabled_by=None)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         await self.manager.async_update_device_config(

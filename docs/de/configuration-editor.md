@@ -21,15 +21,15 @@ Ein Profil enthält ein vollständiges Dashboard. Ein Gerät referenziert genau 
 
 ## JSON- und visueller Editor {#json-und-visueller-editor}
 
-JSON ist immer die Standardansicht. Der Editor bietet getrennte Ansichten für Profilentwurf, Geräte-Override und schreibgeschützte effektive Konfiguration. Speichern erzeugt einen Entwurf; erst **Veröffentlichen** validiert Referenzen, erzeugt eine monotone Revision und verteilt sie. Fehlende Provider blockieren die Veröffentlichung. Vorübergehend fehlende HA-Entities werden als Warnung behandelt.
+JSON ist immer die Standardansicht. Der Code-Editor bietet Syntaxhervorhebung, Zeilennummern, Tab-Einrückung und direkte Syntaxprüfung. Getrennte Ansichten zeigen Profilentwurf, Geräte-Override und schreibgeschützte effektive Konfiguration. Speichern erzeugt beim Profil einen Entwurf; erst **Veröffentlichen** validiert Referenzen, erzeugt eine monotone Revision und verteilt sie. Das Speichern eines Geräte-Overrides veröffentlicht und verteilt den Merge-Patch sofort. Fehlende Provider blockieren die Veröffentlichung. Vorübergehend fehlende HA-Entities werden als Warnung behandelt.
 
-Der visuelle Editor bearbeitet Theme, Tabs, Spalten und übliche native Widgets. Unbekannte oder komplexe Blöcke bleiben unverändert erhalten. Dadurch kann jederzeit ohne Datenverlust zum JSON-Editor gewechselt werden.
+Der visuelle Editor bearbeitet vollständige Profile. Er zeigt die realen Theme-Felder für Farben, Radius, Skalierung, Padding und Gap sowie Tabs, Rasterpositionen, Spans und die üblichen nativen Widgettypen. Widgets können angelegt, sortiert und gelöscht werden. Nicht dargestellte oder komplexe Felder bleiben unverändert erhalten. Geräte-Overrides sind RFC-7396-Merge-Patches und werden deshalb im JSON-Editor bearbeitet; ihre zusammengeführte Wirkung ist rechts sichtbar.
 
 ## Vorschau {#vorschau}
 
 Wähle ein Gerät, um dessen zuletzt gemeldete physische und nutzbare Pixelmaße, Activity-Innenfläche, Orientierung, Dichte, Density-DPI, Font-Scale und bekannte Insets zu verwenden. Die Vorschau rechnet dp und sp mit diesen Werten um und skaliert das Ergebnis proportional in den Browserbereich. Portrait und Landscape können kontrolliert umgeschaltet werden. Offline werden die letzten Gerätewerte verwendet; das generische Tablet ist ausdrücklich nicht gerätespezifisch.
 
-Die Vorschau verwendet aktuelle HA-States, bleibt wegen unterschiedlicher Android- und Browser-Schrift-Engines aber eine Annäherung. Maßgeblich ist das native Gerät.
+Die Vorschau verwendet aktuelle HA-States, die echte Widgetfamilie, Tab-Reihenfolge, explizite Zeilen/Spalten, Spans, Zellhöhen und Theme-Werte. `auto_entities` wird über denselben serverseitigen Compiler wie beim Verteilen an Android aufgelöst. Wegen unterschiedlicher Android- und Browser-Schrift- und Medien-Engines bleibt sie dennoch eine Annäherung. Maßgeblich ist das native Gerät. Die Kopfzeile verlinkt direkt auf die vollständige Widget-Dokumentation mit allen JSON-Codes.
 
 ## Revisionen und Rollback {#revisionen-und-rollback}
 

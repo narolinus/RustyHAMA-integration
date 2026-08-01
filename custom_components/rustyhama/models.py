@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -86,6 +87,7 @@ class DeviceSession:
     websocket: Any
     generation: int
     connected_at: str = field(default_factory=utc_iso)
+    last_activity_monotonic: float = field(default_factory=time.monotonic)
     pending: dict[str, Any] = field(default_factory=dict)
 
 

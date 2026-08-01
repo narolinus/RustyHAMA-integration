@@ -18,13 +18,27 @@ class RustyCamera(RustyEntity, Camera):
 
     _attr_name = "Camera"
     _attr_supported_features = CameraEntityFeature.STREAM
-    _attr_entity_registry_enabled_default = False
+    # Keep camera entities visible. The RustyHAMA camera switch controls runtime
+    # availability; hiding both the entity and the switch made initial setup opaque.
+    _attr_entity_registry_enabled_default = True
 
     def __init__(self, manager: Any, device: DeviceRecord, camera_id: str) -> None:
         RustyEntity.__init__(self, manager, device, f"camera_{camera_id}")
         Camera.__init__(self)
         self.camera_id = camera_id
         self._attr_name = f"Camera {camera_id}"
+
+    @property
+    def available(self) -> bool:
+        """Return availability only while camera service and device are online."""
+        config = self.manager.storage.effective_config(self.device).get(
+            "device_cameras", {}
+        )
+        return bool(
+            self.device.online
+            and isinstance(config, dict)
+            and config.get("enabled", False)
+        )
 
     async def async_camera_image(
         self, width: int | None = None, height: int | None = None
@@ -42,6 +56,16 @@ class RustyCamera(RustyEntity, Camera):
         """Return a direct pinned LAN URL when the device advertises one."""
         cameras = self.device.telemetry.get("cameras", {})
         data = cameras.get(self.camera_id, {}) if isinstance(cameras, dict) else {}
+        if isinstance(cameras, dict) and not data:
+            data = next(
+                (
+                    item
+                    for item in cameras.values()
+                    if isinstance(item, dict)
+                    and str(item.get("id", "")) == self.camera_id
+                ),
+                {},
+            )
         return data.get("stream_url") if data.get("transport") == "direct" else None
 
 

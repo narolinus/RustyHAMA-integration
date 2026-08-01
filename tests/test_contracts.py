@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import voluptuous as vol
 
-from custom_components.rustyhama.api import PanelJavaScriptView
+from custom_components.rustyhama.api import DeviceWebSocketView, PanelJavaScriptView
 from custom_components.rustyhama.merge import merge_patch, redact_secrets
 from custom_components.rustyhama.protocol import envelope, validate_message
 from custom_components.rustyhama.schema import DashboardValidationError, validate_dashboard
@@ -43,3 +43,12 @@ def test_secret_redaction_is_recursive() -> None:
 
 def test_panel_module_can_be_loaded_without_auth_header() -> None:
     assert PanelJavaScriptView.requires_auth is False
+
+
+def test_device_control_channel_uses_application_heartbeat() -> None:
+    """Transport pings must not compete with Android's protocol heartbeat."""
+    source = Path("custom_components/rustyhama/api.py").read_text()
+    control_view = source[source.index("class DeviceWebSocketView") : source.index("class DeviceStreamView")]
+    assert "WebSocketResponse(max_msg_size=" in control_view
+    assert "heartbeat=" not in control_view
+    assert DeviceWebSocketView.requires_auth is False

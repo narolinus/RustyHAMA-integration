@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 from homeassistant.components.assist_pipeline import PipelineEvent, PipelineStage
@@ -20,6 +21,8 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .const import SIGNAL_ASSIST_EVENT, SIGNAL_ASSIST_START
 from .entity import RustyEntity, async_setup_dynamic_entities
 from .models import DeviceRecord
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class RustyAssistSatellite(RustyEntity, AssistSatelliteEntity):
@@ -58,14 +61,36 @@ class RustyAssistSatellite(RustyEntity, AssistSatelliteEntity):
         start_stage = PipelineStage(str(payload.get("start_stage", "stt")))
         end_stage = PipelineStage(str(payload.get("end_stage", "tts")))
         self._accept_task = self.hass.async_create_task(
-            self.async_accept_pipeline_from_satellite(
+            self._async_run_pipeline(stream_id, start_stage, end_stage, payload),
+            f"RustyHAMA Assist {self.device.device_id}",
+        )
+
+    async def _async_run_pipeline(
+        self,
+        stream_id: str,
+        start_stage: PipelineStage,
+        end_stage: PipelineStage,
+        payload: dict[str, Any],
+    ) -> None:
+        """Run a pipeline and always release Android from processing state."""
+        try:
+            await self.async_accept_pipeline_from_satellite(
                 self.manager.async_stream(stream_id),
                 start_stage=start_stage,
                 end_stage=end_stage,
                 wake_word_phrase=payload.get("wake_word_phrase"),
-            ),
-            f"RustyHAMA Assist {self.device.device_id}",
-        )
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:  # The device must not hang when a HA pipeline fails.
+            _LOGGER.exception(
+                "Assist pipeline failed for RustyHAMA device %s",
+                self.device.device_id,
+            )
+            await self._async_forward_event(
+                "error", {"code": "pipeline_failed", "message": str(err)}
+            )
+            await self._async_forward_event("run-end", {})
 
     @callback
     def async_get_configuration(self) -> AssistSatelliteConfiguration:
@@ -106,13 +131,27 @@ class RustyAssistSatellite(RustyEntity, AssistSatelliteEntity):
     @callback
     def on_pipeline_event(self, event: PipelineEvent) -> None:
         """Forward state, transcript, and TTS media events to Android."""
+        event_type = getattr(event.type, "value", str(event.type))
         self.hass.async_create_task(
-            self.manager.async_send_event(
+            self._async_forward_event(event_type, event.data or {})
+        )
+
+    async def _async_forward_event(
+        self, event_type: str, data: dict[str, Any]
+    ) -> None:
+        """Forward one event without leaking background task exceptions."""
+        try:
+            await self.manager.async_send_event(
                 self.device.device_id,
                 "assist_event",
-                {"type": str(event.type), "data": event.data or {}},
+                {"type": event_type, "data": data},
             )
-        )
+        except ConnectionError:
+            _LOGGER.debug(
+                "Dropping Assist event %s for offline device %s",
+                event_type,
+                self.device.device_id,
+            )
 
     async def async_announce(
         self, announcement: AssistSatelliteAnnouncement

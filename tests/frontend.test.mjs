@@ -23,3 +23,38 @@ test('viewport fit preserves aspect ratio', () => {
   assert.equal(fit(800, 1280, 1000, 640), 0.5);
   assert.equal(fit(480, 800, 1000, 1000), 1);
 });
+
+test('JSON editor provides syntax highlighting and line numbers', () => {
+  assert.match(panel, /highlightJson/);
+  assert.match(panel, /line-numbers/);
+  assert.match(panel, /json-key/);
+  assert.match(panel, /selectionStart/);
+});
+
+test('preview uses the server compiler and native grid fields', () => {
+  assert.match(panel, /compile_preview/);
+  for (const field of ['cell_height', 'rowspan', 'colspan', 'data-preview-tab']) {
+    assert.ok(panel.includes(field), `missing ${field}`);
+  }
+});
+
+test('visual editor exposes real theme and widget fields', () => {
+  for (const field of [
+    'background_color',
+    'primary_color',
+    'accent_color',
+    'accent_text_color',
+    'corner_radius',
+    'ui_scale',
+  ]) {
+    assert.ok(panel.includes(field), `missing ${field}`);
+  }
+  for (const type of ['light', 'cover', 'climate', 'media_player', 'clock']) {
+    assert.ok(panel.includes(type), `missing widget type ${type}`);
+  }
+});
+
+test('widget documentation is linked from the panel', () => {
+  assert.match(panel, /https:\/\/daniel\.snii\.de\/RustyHAMA\//);
+  assert.match(panel, /Widget-Dokumentation/);
+});

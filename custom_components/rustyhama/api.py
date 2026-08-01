@@ -87,7 +87,10 @@ class DeviceWebSocketView(HomeAssistantView):
         device = manager.authenticate(device_id, credential)
         if device is None:
             raise web.HTTPUnauthorized()
-        websocket = web.WebSocketResponse(heartbeat=15, max_msg_size=4 * 1024 * 1024)
+        # Old Android/OkHttp combinations are unreliable with overlapping transport
+        # pings. RustyHAMA has a versioned application heartbeat and a server-side
+        # watchdog, so the control channel deliberately does not use aiohttp pings.
+        websocket = web.WebSocketResponse(max_msg_size=4 * 1024 * 1024)
         await websocket.prepare(request)
         session = await manager.async_attach(device, websocket)
         try:
@@ -118,7 +121,7 @@ class DeviceStreamView(HomeAssistantView):
         manager = _manager(request)
         if manager.authenticate(device_id, credential) is None:
             raise web.HTTPUnauthorized()
-        websocket = web.WebSocketResponse(heartbeat=15, max_msg_size=2 * 1024 * 1024)
+        websocket = web.WebSocketResponse(max_msg_size=2 * 1024 * 1024)
         await websocket.prepare(request)
         queue = manager.streams.setdefault(session_id, asyncio.Queue(maxsize=8))
         try:
@@ -129,7 +132,12 @@ class DeviceStreamView(HomeAssistantView):
                     await queue.put(None)
                     break
         finally:
-            await queue.put(None)
+            # A cancelled pipeline no longer drains this bounded queue. Never leave
+            # the HTTP handler blocked while trying to append an end marker.
+            try:
+                queue.put_nowait(None)
+            except asyncio.QueueFull:
+                pass
         return websocket
 
 
@@ -142,7 +150,11 @@ class PanelJavaScriptView(HomeAssistantView):
 
     async def get(self, request: web.Request) -> web.Response:
         path = Path(__file__).parent / "frontend" / "panel.js"
-        return web.Response(text=path.read_text(encoding="utf-8"), content_type="text/javascript")
+        return web.Response(
+            text=path.read_text(encoding="utf-8"),
+            content_type="text/javascript",
+            headers={"Cache-Control": "no-store"},
+        )
 
 
 class ImmichProviderView(HomeAssistantView):

@@ -21,6 +21,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import (
     DEVICE_TOKEN_BYTES,
+    OFFLINE_AFTER_SECONDS,
     PAIR_MAX_ATTEMPTS,
     PAIR_TTL_SECONDS,
     SIGNAL_ASSIST_EVENT,
@@ -81,6 +82,7 @@ class RustyManager:
         self.compiler = DashboardCompiler(hass)
         self._compiled: dict[str, Compilation] = {}
         self._refresh_tasks: dict[str, asyncio.Task[None]] = {}
+        self._watchdog_tasks: dict[str, asyncio.Task[None]] = {}
 
     async def async_setup(self) -> None:
         """Load state."""
@@ -212,6 +214,10 @@ class RustyManager:
         device.last_seen = utc_iso()
         session = DeviceSession(device.device_id, websocket, device.session_generation)
         self.sessions[device.device_id] = session
+        self._watchdog_tasks[device.device_id] = self.hass.async_create_task(
+            self._async_watch_session(session),
+            f"RustyHAMA watchdog {device.device_id}",
+        )
         await self.storage.async_save()
         compilation = self._compile(device)
         await websocket.send_json(
@@ -236,6 +242,9 @@ class RustyManager:
         if current is not session:
             return
         self.sessions.pop(session.device_id, None)
+        watchdog = self._watchdog_tasks.pop(session.device_id, None)
+        if watchdog is not None and watchdog is not asyncio.current_task():
+            watchdog.cancel()
         refresh = self._refresh_tasks.pop(session.device_id, None)
         if refresh is not None:
             refresh.cancel()
@@ -251,6 +260,7 @@ class RustyManager:
     ) -> None:
         """Handle a validated device message."""
         message = validate_message(raw)
+        session.last_activity_monotonic = time.monotonic()
         device = self.storage.devices[session.device_id]
         if message["id"] in device.recent_message_ids:
             await session.websocket.send_json(envelope("ack", {}, message_id=message["id"]))
@@ -380,6 +390,9 @@ class RustyManager:
         if refresh is not None:
             refresh.cancel()
         session = self.sessions.pop(device_id, None)
+        watchdog = self._watchdog_tasks.pop(device_id, None)
+        if watchdog is not None:
+            watchdog.cancel()
         if session and not session.websocket.closed:
             await session.websocket.close(code=4003, message=b"revoked")
         self.hass.config_entries.async_remove_subentry(self.entry, device.subentry_id)
@@ -416,6 +429,7 @@ class RustyManager:
                     "token_hash": "**REDACTED**",
                     "online": device.online,
                     "effective_config": self.storage.effective_config(device),
+                    "compiled_config": self._compile(device).config,
                 }
                 for device in self.storage.devices.values()
             ],
@@ -426,6 +440,25 @@ class RustyManager:
         future = self._pending_acks.get(message_id)
         if future and not future.done():
             future.set_result(payload)
+
+    async def _async_watch_session(self, session: DeviceSession) -> None:
+        """Close half-open sessions using the versioned application heartbeat."""
+        try:
+            while self.sessions.get(session.device_id) is session:
+                await asyncio.sleep(OFFLINE_AFTER_SECONDS)
+                silence = time.monotonic() - session.last_activity_monotonic
+                if silence < OFFLINE_AFTER_SECONDS:
+                    continue
+                _LOGGER.warning(
+                    "Closing stale RustyHAMA session for %s after %.1f seconds",
+                    session.device_id,
+                    silence,
+                )
+                if not session.websocket.closed:
+                    await session.websocket.close(code=4000, message=b"heartbeat timeout")
+                return
+        except asyncio.CancelledError:
+            return
 
     def _purge_pairings(self) -> None:
         now = time.time()

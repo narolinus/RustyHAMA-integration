@@ -27,6 +27,38 @@ async def ws_get_snapshot(hass: HomeAssistant, connection: Any, msg: dict[str, A
 @websocket_api.require_admin
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "rustyhama/compile_preview",
+        vol.Required("config"): dict,
+        vol.Optional("device_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_compile_preview(
+    hass: HomeAssistant, connection: Any, msg: dict[str, Any]
+) -> None:
+    """Compile an editor draft with the same server logic used for Android."""
+    manager = _manager(hass)
+    device = manager.storage.devices.get(msg.get("device_id", ""))
+    area_id = device.area_id if device is not None else None
+    try:
+        validate_dashboard(msg["config"])
+        compilation = manager.compiler.compile(msg["config"], area_id)
+    except DashboardValidationError as err:
+        connection.send_error(msg["id"], "invalid_config", str(err))
+        return
+    connection.send_result(
+        msg["id"],
+        {
+            "config": compilation.config,
+            "entity_ids": sorted(compilation.entity_ids),
+            "dynamic": compilation.dynamic,
+        },
+    )
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "rustyhama/create_pairing",
         vol.Required("name"): str,
         vol.Optional("profile_id", default=DEFAULT_PROFILE_ID): str,
@@ -207,6 +239,7 @@ async def ws_rotate_credential(
 
 COMMANDS = (
     ws_get_snapshot,
+    ws_compile_preview,
     ws_create_pairing,
     ws_save_profile,
     ws_publish_profile,
