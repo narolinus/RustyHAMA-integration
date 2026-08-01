@@ -6,17 +6,17 @@ on:
 jobs:
   test:
     runs-on: docker
+    container: python:3.14
     steps:
-      - uses: https://github.com/actions/checkout@v4
-      - uses: https://github.com/actions/setup-python@v5
-        with:
-          python-version: "3.14"
-          cache: pip
-      - uses: https://github.com/actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Install toolchain
-        run: pip install -e '.[test]'
+      - name: Checkout and install toolchain
+        run: |
+          apt-get update
+          apt-get install -y git nodejs npm
+          git init
+          git remote add origin "$FORGEJO_SERVER_URL/$FORGEJO_REPOSITORY.git"
+          git fetch --depth 1 origin "$FORGEJO_SHA"
+          git checkout --detach FETCH_HEAD
+          pip install -e '.[test]'
       - run: ruff check .
       - run: mypy custom_components/rustyhama
       - run: pytest
