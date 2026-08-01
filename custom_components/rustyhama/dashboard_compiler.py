@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
-from dataclasses import dataclass
-from datetime import UTC, datetime
 import fnmatch
 import json
 import re
+from copy import deepcopy
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 AUTO_ENTITY_TYPES = frozenset({"auto_entities", "auto-entities", "custom:auto-entities"})
@@ -268,12 +268,19 @@ class DashboardCompiler:
         def key(entry: dict[str, Any]) -> tuple[int, Any]:
             entity_id = self._entity_id(entry)
             state = states.get(entity_id, {})
-            if method == "domain": value: Any = entity_id.partition(".")[0]
-            elif method == "name": value = self._value(state, "friendly_name") or entity_id
-            elif method == "state": value = state.get("state", "")
-            elif method == "attribute": value = self._value(state, attribute) or ""
-            elif method in {"last_changed", "last_updated"}: value = state.get(method, "")
-            else: value = entity_id
+            value: Any
+            if method == "domain":
+                value = entity_id.partition(".")[0]
+            elif method == "name":
+                value = self._value(state, "friendly_name") or entity_id
+            elif method == "state":
+                value = state.get("state", "")
+            elif method == "attribute":
+                value = self._value(state, attribute) or ""
+            elif method in {"last_changed", "last_updated"}:
+                value = state.get(method, "")
+            else:
+                value = entity_id
             if sort.get("numeric"):
                 try:
                     return (0, float(value))
