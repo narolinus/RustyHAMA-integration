@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+import struct
 import tempfile
 import zipfile
 from pathlib import Path
@@ -22,6 +23,17 @@ assert hacs["homeassistant"] == "2026.7.0"
 assert manifest["domain"] == "rustyhama"
 assert re.fullmatch(r"\d+\.\d+\.\d+", manifest["version"])
 
+brand_sizes = {
+    "icon.png": (256, 256),
+    "icon@2x.png": (512, 512),
+    "logo.png": (256, 256),
+    "logo@2x.png": (512, 512),
+}
+for filename, expected_size in brand_sizes.items():
+    image = (INTEGRATION / "brand" / filename).read_bytes()
+    assert image[:8] == b"\x89PNG\r\n\x1a\n", filename
+    assert struct.unpack(">II", image[16:24]) == expected_size, filename
+
 with tempfile.TemporaryDirectory() as directory:
     archive = Path(directory) / hacs["filename"]
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as output:
@@ -31,6 +43,10 @@ with tempfile.TemporaryDirectory() as directory:
     with zipfile.ZipFile(archive) as packaged:
         names = set(packaged.namelist())
         assert "manifest.json" in names
+        assert "brand/icon.png" in names
+        assert "brand/icon@2x.png" in names
+        assert "brand/logo.png" in names
+        assert "brand/logo@2x.png" in names
         assert "custom_components/rustyhama/manifest.json" not in names
         assert packaged.testzip() is None
 

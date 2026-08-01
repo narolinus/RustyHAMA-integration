@@ -1,5 +1,7 @@
 # RustyHAMA Integration
 
+![RustyHAMA](custom_components/rustyhama/brand/logo.png)
+
 RustyHAMA is the Home Assistant 2026.7+ integration for paired Android wall
 tablets. It owns device configuration, dashboard profiles, credentials,
 provider connections, typed actions and native Home Assistant entities.
