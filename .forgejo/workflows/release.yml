@@ -36,10 +36,10 @@ jobs:
           source: "site/"
       - name: Mirror commit and tag to GitHub
         env:
-          GITHUB_MIRROR_TOKEN: ${{ secrets.GITHUB_MIRROR_TOKEN }}
+          GH_MIRROR_TOKEN: ${{ secrets.GH_MIRROR_TOKEN }}
         run: |
           set -eu
-          test -n "$GITHUB_MIRROR_TOKEN"
-          git remote add github "https://x-access-token:${GITHUB_MIRROR_TOKEN}@github.com/narolinus/RustyHAMA-integration.git"
+          test -n "$GH_MIRROR_TOKEN"
+          git remote add github "https://x-access-token:${GH_MIRROR_TOKEN}@github.com/narolinus/RustyHAMA-integration.git"
           git push github "${GITHUB_SHA}:refs/heads/main"
           git push github "refs/tags/${GITHUB_REF_NAME}"

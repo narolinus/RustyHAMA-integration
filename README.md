@@ -4,6 +4,10 @@ RustyHAMA is the Home Assistant 2026.7+ integration for paired Android wall
 tablets. It owns device configuration, dashboard profiles, credentials,
 provider connections, typed actions and native Home Assistant entities.
 
+> This GitHub repository is the public HACS mirror. Development, support and
+> documentation are maintained in [Forgejo](https://dev.spittank.org/daniel/RustyHAMA-Integration).
+> GitHub Issues and Discussions are intentionally disabled.
+
 Dashboard profiles are compiled server-side per device. In particular,
 `auto-entities` filtering and sorting remain in Home Assistant, so old Android
 devices receive only the resolved entity list and the states required to render it.
