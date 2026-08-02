@@ -113,3 +113,28 @@ def test_compiler_preserves_explicit_entries_applies_exclusion_and_sorts() -> No
     entries = compiled.config["tabs"][0]["widgets"][0]["entities"]
     assert [entry["entity"] for entry in entries] == ["sensor.beta", "sensor.alpha"]
     assert compiled.entity_ids == frozenset({"sensor.alpha", "sensor.beta"})
+
+
+def test_compiler_includes_entities_used_by_runtime_discovery() -> None:
+    compiler = DashboardCompiler(
+        FakeHass(
+            [
+                FakeState("calendar.family", "on", friendly_name="Family"),
+                FakeState("media_player.kitchen", "idle", friendly_name="Kitchen"),
+                FakeState("sensor.unrelated", "1", friendly_name="Unrelated"),
+            ]
+        )
+    )
+    compiled = compiler.compile(
+        {
+            "schema_version": 1,
+            "tabs": [
+                {"id": "calendar", "widgets": [{"type": "calendar"}]},
+                {"id": "music", "type": "music_assistant", "widgets": []},
+            ],
+        }
+    )
+
+    assert compiled.entity_ids == frozenset(
+        {"calendar.family", "media_player.kitchen"}
+    )

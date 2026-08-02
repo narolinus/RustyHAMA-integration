@@ -63,9 +63,38 @@ class DashboardCompiler:
 
         visit(result)
         selected.update(self._explicit_entity_references(result))
+        selected.update(self._implicit_entity_references(result, states))
         selected.discard("")
         encoded = json.dumps(result, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         return Compilation(result, frozenset(selected), dynamic, encoded)
+
+    def _implicit_entity_references(
+        self, config: dict[str, Any], states: dict[str, dict[str, Any]]
+    ) -> set[str]:
+        """Select state families used by widgets that intentionally auto-discover."""
+        domains: set[str] = set()
+
+        def visit(value: Any) -> None:
+            if isinstance(value, dict):
+                widget_type = str(value.get("type", "")).lower()
+                if widget_type == "calendar":
+                    domains.add("calendar")
+                # Media controls discover groupable players; the MA tab maps MA
+                # player IDs to HA media_player entities at runtime.
+                if widget_type in {"media", "media_player", "music_assistant"}:
+                    domains.add("media_player")
+                for child in value.values():
+                    visit(child)
+            elif isinstance(value, list):
+                for child in value:
+                    visit(child)
+
+        visit(config)
+        return {
+            entity_id
+            for entity_id in states
+            if entity_id.partition(".")[0] in domains
+        }
 
     def _metadata(self, entity_id: str, default_area: str | None) -> dict[str, Any]:
         """Expose HA registry selectors without ever exposing registries to Android."""

@@ -52,3 +52,21 @@ def test_device_control_channel_uses_application_heartbeat() -> None:
     assert "WebSocketResponse(max_msg_size=" in control_view
     assert "heartbeat=" not in control_view
     assert DeviceWebSocketView.requires_auth is False
+
+
+def test_provider_proxies_preserve_android_compatibility_contract() -> None:
+    source = Path("custom_components/rustyhama/api.py").read_text()
+    immich = source[
+        source.index("class ImmichProviderView") : source.index(
+            "class MusicAssistantProviderView"
+        )
+    ]
+    music = source[
+        source.index("class MusicAssistantProviderView") : source.index(
+            "def register_http_views"
+        )
+    ]
+    assert 'for name in ("Accept", "Content-Type")' in immich
+    assert 'tail != "imageproxy"' in music
+    downstream = music[music.index("downstream =") : music.index("await downstream.prepare")]
+    assert "heartbeat=" not in downstream

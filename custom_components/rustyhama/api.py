@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from pathlib import Path
 from typing import Any, ClassVar
@@ -25,6 +26,8 @@ from .const import (
 )
 from .protocol import envelope
 from .schema import referenced_providers
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _manager(request: web.Request) -> Any:
@@ -94,20 +97,47 @@ class DeviceWebSocketView(HomeAssistantView):
         # watchdog, so the control channel deliberately does not use aiohttp pings.
         websocket = web.WebSocketResponse(max_msg_size=4 * 1024 * 1024)
         await websocket.prepare(request)
-        session = await manager.async_attach(device, websocket)
+        session = None
         try:
+            session = await manager.async_attach(device, websocket)
             async for item in websocket:
                 if item.type == WSMsgType.TEXT:
                     try:
-                        await manager.async_handle_message(session, json.loads(item.data))
+                        raw = json.loads(item.data)
+                        await manager.async_handle_message(session, raw)
                     except (ValueError, TypeError, json.JSONDecodeError, vol.Invalid) as err:
                         await websocket.send_json(
                             envelope("protocol_error", {"error": str(err)})
                         )
+                    except Exception:  # Keep one bad command from killing the channel.
+                        _LOGGER.exception(
+                            "RustyHAMA device message failed for %s", device.device_id
+                        )
+                        message_id = raw.get("id") if isinstance(raw, dict) else None
+                        message_type = raw.get("type") if isinstance(raw, dict) else None
+                        response_type = (
+                            "request_result"
+                            if message_type in manager.DEVICE_REQUEST_TYPES
+                            else "command_ack"
+                        )
+                        await websocket.send_json(
+                            envelope(
+                                response_type,
+                                {"success": False, "error": "internal_error"},
+                                message_id=message_id,
+                            )
+                        )
                 elif item.type in (WSMsgType.ERROR, WSMsgType.CLOSE, WSMsgType.CLOSED):
                     break
+        except Exception:
+            _LOGGER.exception(
+                "RustyHAMA device session failed for %s", device.device_id
+            )
+            if not websocket.closed:
+                await websocket.close(code=1011, message=b"device session failed")
         finally:
-            await manager.async_detach(session)
+            if session is not None:
+                await manager.async_detach(session)
         return websocket
 
 
@@ -207,6 +237,9 @@ class ImmichProviderView(HomeAssistantView):
             raise web.HTTPNotFound()
         url = str(provider["url"]).rstrip("/") + "/" + tail
         headers = {"x-api-key": str(provider["api_key"])}
+        for name in ("Accept", "Content-Type"):
+            if value := request.headers.get(name):
+                headers[name] = value
         body = await request.read() if request.method == "POST" else None
         session = async_get_clientsession(_manager(request).hass)
         async with session.request(
@@ -259,7 +292,7 @@ class MusicAssistantProviderView(HomeAssistantView):
         provider = self._provider(request, provider_id)
         if tail == "ws":
             return await self._websocket(request, provider)
-        if not tail.startswith("imageproxy/"):
+        if tail != "imageproxy" and not tail.startswith("imageproxy/"):
             raise web.HTTPNotFound()
         url = str(provider["url"]).rstrip("/") + "/" + tail
         headers = {"Authorization": f"Bearer {provider['token']}"}
@@ -274,7 +307,9 @@ class MusicAssistantProviderView(HomeAssistantView):
     async def _websocket(
         self, request: web.Request, provider: dict[str, Any]
     ) -> web.StreamResponse:
-        downstream = web.WebSocketResponse(heartbeat=15, max_msg_size=4 * 1024 * 1024)
+        # The app-level watchdog is authoritative. Aiohttp transport pings are not
+        # reliable on the oldest supported Android/OkHttp combinations.
+        downstream = web.WebSocketResponse(max_msg_size=4 * 1024 * 1024)
         await downstream.prepare(request)
         base = str(provider["url"]).rstrip("/")
         upstream_url = base.replace("https://", "wss://").replace("http://", "ws://")

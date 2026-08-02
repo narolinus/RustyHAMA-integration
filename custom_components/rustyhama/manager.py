@@ -9,15 +9,22 @@ import logging
 import secrets
 import time
 from collections.abc import AsyncIterator
+from datetime import date, datetime
+from functools import partial
 from hashlib import sha256
 from types import MappingProxyType
 from typing import Any
 from uuid import uuid4
 
+from homeassistant.components.calendar import DATA_COMPONENT as CALENDAR_COMPONENT
+from homeassistant.components.calendar import WEBSOCKET_EVENT_SCHEMA
+from homeassistant.components.recorder import get_instance as get_recorder_instance
+from homeassistant.components.recorder.history import get_significant_states
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.util import dt as dt_util
 
 from .const import (
     DEVICE_TOKEN_BYTES,
@@ -39,9 +46,28 @@ _LOGGER = logging.getLogger(__name__)
 
 ALLOWED_SERVICES: dict[str, frozenset[str]] = {
     "button": frozenset({"press"}),
-    "climate": frozenset({"set_hvac_mode", "set_temperature"}),
+    "climate": frozenset(
+        {
+            "set_fan_mode",
+            "set_hvac_mode",
+            "set_preset_mode",
+            "set_swing_horizontal_mode",
+            "set_swing_mode",
+            "set_temperature",
+        }
+    ),
     "cover": frozenset({"close_cover", "open_cover", "set_cover_position", "stop_cover"}),
-    "fan": frozenset({"set_percentage", "turn_off", "turn_on"}),
+    "fan": frozenset(
+        {
+            "oscillate",
+            "set_direction",
+            "set_percentage",
+            "set_preset_mode",
+            "toggle",
+            "turn_off",
+            "turn_on",
+        }
+    ),
     "light": frozenset({"turn_off", "turn_on", "toggle"}),
     "media_player": frozenset(
         {
@@ -70,6 +96,17 @@ def token_hash(value: str) -> str:
 
 class RustyManager:
     """Coordinate storage, paired devices, and live sessions."""
+
+    DEVICE_REQUEST_TYPES = frozenset(
+        {
+            "calendar_create",
+            "calendar_delete",
+            "calendar_events",
+            "calendar_update",
+            "history",
+            "weather_forecast",
+        }
+    )
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
@@ -206,6 +243,9 @@ class RustyManager:
 
     async def async_attach(self, device: DeviceRecord, websocket: Any) -> DeviceSession:
         """Replace any prior live session for a device."""
+        # Compile before replacing the current connection. A malformed draft must
+        # never tear down a healthy device session.
+        compilation = self._compile(device)
         old = self.sessions.pop(device.device_id, None)
         old_watchdog = self._watchdog_tasks.pop(device.device_id, None)
         if old_watchdog is not None:
@@ -221,8 +261,6 @@ class RustyManager:
             self._async_watch_session(session),
             f"RustyHAMA watchdog {device.device_id}",
         )
-        await self.storage.async_save()
-        compilation = self._compile(device)
         await websocket.send_json(
             envelope(
                 "hello",
@@ -236,6 +274,14 @@ class RustyManager:
         await websocket.send_json(
             envelope("states", {"states": self._initial_states(compilation)})
         )
+        try:
+            await self.storage.async_save()
+        except Exception:
+            # Online/last-seen persistence is diagnostic. It must not make the
+            # live control channel unusable when HA storage is temporarily busy.
+            _LOGGER.exception(
+                "Could not persist RustyHAMA session state for %s", device.device_id
+            )
         self._signal_device(device.device_id)
         return session
 
@@ -272,19 +318,24 @@ class RustyManager:
         device.last_seen = utc_iso()
         kind = message["type"]
         payload = message["payload"]
+        persist = False
         if kind == "heartbeat":
             await session.websocket.send_json(envelope("heartbeat_ack", {}, message_id=message["id"]))
         elif kind == "telemetry":
             device.telemetry.update(payload)
+            persist = True
             self._signal_device(device.device_id)
         elif kind == "capabilities":
             device.capabilities = dict(payload)
+            persist = True
             self._signal_device(device.device_id)
         elif kind == "display":
             device.display = dict(payload)
+            persist = True
             self._signal_device(device.device_id)
         elif kind == "config_ack":
             device.acknowledged_revision = int(message["revision"])
+            persist = True
             self._resolve_ack(message["id"], payload)
             self._signal_device(device.device_id)
         elif kind == "command_ack":
@@ -309,7 +360,16 @@ class RustyManager:
             )
         elif kind == "entity_action":
             await self._async_entity_action(device, message)
-        await self.storage.async_save()
+        elif kind in self.DEVICE_REQUEST_TYPES:
+            await self._async_device_request(device, message)
+        if persist:
+            try:
+                await self.storage.async_save()
+            except Exception:
+                _LOGGER.exception(
+                    "Could not persist RustyHAMA message state for %s",
+                    device.device_id,
+                )
 
     async def async_send_command(
         self,
@@ -513,10 +573,15 @@ class RustyManager:
                     await session.websocket.send_json(
                         envelope("state", {"state": new_state.as_dict()})
                     )
-                except (ConnectionError, RuntimeError):
+                except Exception:
                     # aiohttp can transition to closing after the closed check but
                     # before the frame write. Detach only if this is still the active
                     # generation; replacement sessions must remain untouched.
+                    _LOGGER.debug(
+                        "State delivery failed for %s; detaching stale session",
+                        device_id,
+                        exc_info=True,
+                    )
                     await self.async_detach(session)
                     continue
             if compilation.dynamic:
@@ -538,6 +603,140 @@ class RustyManager:
                 self._refresh_tasks.pop(device_id, None)
 
         self._refresh_tasks[device_id] = self.hass.async_create_task(refresh())
+
+    async def _async_device_request(
+        self, device: DeviceRecord, message: dict[str, Any]
+    ) -> None:
+        """Serve a narrow HA data operation over the paired device channel."""
+        session = self.sessions.get(device.device_id)
+        if session is None or session.websocket.closed:
+            return
+        try:
+            result = await self._async_execute_device_request(
+                device, message["type"], message["payload"]
+            )
+        except Exception as err:
+            _LOGGER.warning(
+                "RustyHAMA request %s failed for %s: %s",
+                message["type"],
+                device.device_id,
+                err,
+            )
+            payload = {"success": False, "error": str(err) or "request_failed"}
+        else:
+            payload = {"success": True, "result": self._json_compatible(result)}
+        await session.websocket.send_json(
+            envelope("request_result", payload, message_id=message["id"])
+        )
+
+    async def _async_execute_device_request(
+        self, device: DeviceRecord, kind: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Execute one allow-listed data request."""
+        entity_id = self._allowed_request_entity(device, payload, kind)
+        if kind.startswith("calendar_"):
+            component = self.hass.data.get(CALENDAR_COMPONENT)
+            entity = component.get_entity(entity_id) if component is not None else None
+            if entity is None:
+                raise ValueError("calendar_not_found")
+            if kind == "calendar_events":
+                start = dt_util.parse_datetime(str(payload.get("start", "")))
+                end = dt_util.parse_datetime(str(payload.get("end", "")))
+                if start is None or end is None or end <= start:
+                    raise ValueError("invalid_calendar_range")
+                events = await entity.async_get_events(
+                    self.hass, dt_util.as_local(start), dt_util.as_local(end)
+                )
+                return {"events": [event.as_dict() for event in events]}
+            if kind == "calendar_create":
+                event = WEBSOCKET_EVENT_SCHEMA(dict(payload.get("event") or {}))
+                await entity.async_create_event(**event)
+                return {}
+            uid = str(payload.get("uid", ""))
+            if not uid:
+                raise ValueError("calendar_uid_required")
+            recurrence_id = str(payload.get("recurrence_id") or "") or None
+            recurrence_range = str(payload.get("recurrence_range") or "") or None
+            if kind == "calendar_update":
+                event = WEBSOCKET_EVENT_SCHEMA(dict(payload.get("event") or {}))
+                await entity.async_update_event(
+                    uid,
+                    event,
+                    recurrence_id=recurrence_id,
+                    recurrence_range=recurrence_range,
+                )
+                return {}
+            await entity.async_delete_event(
+                uid,
+                recurrence_id=recurrence_id,
+                recurrence_range=recurrence_range,
+            )
+            return {}
+        if kind == "weather_forecast":
+            forecast_type = str(payload.get("forecast_type") or "daily")
+            if forecast_type not in {"daily", "hourly", "twice_daily"}:
+                raise ValueError("invalid_forecast_type")
+            response = await self.hass.services.async_call(
+                "weather",
+                "get_forecasts",
+                {"type": forecast_type},
+                blocking=True,
+                target={"entity_id": entity_id},
+                return_response=True,
+            )
+            return dict(response or {})
+        if kind == "history":
+            start = dt_util.parse_datetime(str(payload.get("start", "")))
+            end = dt_util.parse_datetime(str(payload.get("end", "")))
+            if start is None or end is None or end <= start:
+                raise ValueError("invalid_history_range")
+            values = await get_recorder_instance(self.hass).async_add_executor_job(
+                partial(
+                    get_significant_states,
+                    self.hass,
+                    start,
+                    end,
+                    entity_ids=[entity_id],
+                    minimal_response=True,
+                    no_attributes=True,
+                )
+            )
+            return {"history": [values.get(entity_id, [])]}
+        raise ValueError("unsupported_request")
+
+    def _allowed_request_entity(
+        self, device: DeviceRecord, payload: dict[str, Any], kind: str
+    ) -> str:
+        """Validate that a data request stays inside the compiled dashboard scope."""
+        entity_id = str(payload.get("entity_id", ""))
+        expected_domain = (
+            "calendar"
+            if kind.startswith("calendar_")
+            else "weather"
+            if kind == "weather_forecast"
+            else ""
+        )
+        domain = entity_id.partition(".")[0]
+        if (
+            not entity_id
+            or entity_id not in self.allowed_entities(device)
+            or (expected_domain and domain != expected_domain)
+        ):
+            raise PermissionError("operation_not_allowed")
+        return entity_id
+
+    @classmethod
+    def _json_compatible(cls, value: Any) -> Any:
+        """Convert HA dates, states and mappings to an aiohttp JSON value."""
+        if isinstance(value, (date, datetime)):
+            return value.isoformat()
+        if hasattr(value, "as_dict"):
+            return cls._json_compatible(value.as_dict())
+        if isinstance(value, dict):
+            return {str(key): cls._json_compatible(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple, set, frozenset)):
+            return [cls._json_compatible(item) for item in value]
+        return value
 
     async def _async_entity_action(
         self, device: DeviceRecord, message: dict[str, Any]
