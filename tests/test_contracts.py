@@ -11,8 +11,10 @@ from custom_components.rustyhama.api import DeviceWebSocketView, PanelJavaScript
 from custom_components.rustyhama.dashboard_compiler import Compilation
 from custom_components.rustyhama.manager import RustyManager
 from custom_components.rustyhama.merge import merge_patch, redact_secrets
+from custom_components.rustyhama.models import DeviceRecord
 from custom_components.rustyhama.protocol import envelope, validate_message
 from custom_components.rustyhama.schema import DashboardValidationError, validate_dashboard
+from custom_components.rustyhama.sensor import SENSORS, RustySensor
 
 
 def test_merge_patch_vectors() -> None:
@@ -103,3 +105,13 @@ def test_initial_states_are_json_serializable() -> None:
     assert values[0]["attributes"]["media_position_updated_at"] == (
         "2026-08-02T12:30:00+00:00"
     )
+
+
+def test_last_seen_timestamp_sensor_returns_datetime() -> None:
+    device = DeviceRecord("device", "Tablet", "hash", "subentry")
+    device.last_seen = "2026-08-02T12:30:00+00:00"
+    spec = next(item for item in SENSORS if item.key == "last_seen")
+
+    value = RustySensor(object(), device, spec).native_value
+
+    assert value == datetime(2026, 8, 2, 12, 30, tzinfo=UTC)

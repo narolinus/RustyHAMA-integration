@@ -9,6 +9,7 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from .entity import RustyEntity, async_setup_dynamic_entities, nested_value
 from .models import DeviceRecord
@@ -59,7 +60,11 @@ class RustySensor(RustyEntity, SensorEntity):
     def native_value(self) -> Any:
         source = {**self.device.telemetry, "display": self.device.display}
         if self.spec.key == "last_seen":
-            return self.device.last_seen
+            return (
+                dt_util.parse_datetime(self.device.last_seen)
+                if self.device.last_seen
+                else None
+            )
         return nested_value(source, self.spec.path)
 
 

@@ -257,7 +257,7 @@ class RustyManager:
         device.last_seen = utc_iso()
         session = DeviceSession(device.device_id, websocket, device.session_generation)
         self.sessions[device.device_id] = session
-        self._watchdog_tasks[device.device_id] = self.hass.async_create_task(
+        self._watchdog_tasks[device.device_id] = self.hass.async_create_background_task(
             self._async_watch_session(session),
             f"RustyHAMA watchdog {device.device_id}",
         )
