@@ -551,7 +551,7 @@ class RustyManager:
 
     def _initial_states(self, compilation: Compilation) -> list[dict[str, Any]]:
         return [
-            state.as_dict()
+            self._json_compatible(state.as_dict())
             for entity_id in sorted(compilation.entity_ids)
             if (state := self.hass.states.get(entity_id)) is not None
         ]
@@ -571,7 +571,10 @@ class RustyManager:
             if entity_id in compilation.entity_ids and not session.websocket.closed:
                 try:
                     await session.websocket.send_json(
-                        envelope("state", {"state": new_state.as_dict()})
+                        envelope(
+                            "state",
+                            {"state": self._json_compatible(new_state.as_dict())},
+                        )
                     )
                 except Exception:
                     # aiohttp can transition to closing after the closed check but

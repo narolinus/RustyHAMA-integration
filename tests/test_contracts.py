@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 import voluptuous as vol
 
 from custom_components.rustyhama.api import DeviceWebSocketView, PanelJavaScriptView
+from custom_components.rustyhama.dashboard_compiler import Compilation
+from custom_components.rustyhama.manager import RustyManager
 from custom_components.rustyhama.merge import merge_patch, redact_secrets
 from custom_components.rustyhama.protocol import envelope, validate_message
 from custom_components.rustyhama.schema import DashboardValidationError, validate_dashboard
@@ -70,3 +73,33 @@ def test_provider_proxies_preserve_android_compatibility_contract() -> None:
     assert 'tail != "imageproxy"' in music
     downstream = music[music.index("downstream =") : music.index("await downstream.prepare")]
     assert "heartbeat=" not in downstream
+
+
+def test_initial_states_are_json_serializable() -> None:
+    class State:
+        def as_dict(self) -> dict[str, object]:
+            return {
+                "entity_id": "media_player.bedroom",
+                "attributes": {
+                    "media_position_updated_at": datetime(
+                        2026, 8, 2, 12, 30, tzinfo=UTC
+                    )
+                },
+            }
+
+    class States:
+        @staticmethod
+        def get(entity_id: str) -> State | None:
+            return State() if entity_id == "media_player.bedroom" else None
+
+    manager = object.__new__(RustyManager)
+    manager.hass = type("Hass", (), {"states": States()})()
+    compilation = Compilation(
+        {}, frozenset({"media_player.bedroom"}), False, "{}"
+    )
+
+    values = manager._initial_states(compilation)
+    json.dumps(values)
+    assert values[0]["attributes"]["media_position_updated_at"] == (
+        "2026-08-02T12:30:00+00:00"
+    )
