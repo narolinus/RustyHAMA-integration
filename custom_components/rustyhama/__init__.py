@@ -59,8 +59,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: RustyConfigEntry) -> boo
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: RustyConfigEntry) -> bool:
-    """Unload platforms; HTTP routes remain valid until HA restart."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    """Unload platforms and detach all transports owned by this manager."""
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if not unloaded:
+        return False
+    manager = entry.runtime_data.manager
+    await manager.async_shutdown()
+    domain_data = hass.data.get(DOMAIN, {})
+    if domain_data.get("manager") is manager:
+        domain_data.pop("manager", None)
+    return True
 
 
 async def async_remove_config_entry_device(

@@ -128,6 +128,42 @@ class RustyManager:
             self.hass.bus.async_listen("state_changed", self._async_state_changed)
         )
 
+    async def async_shutdown(self) -> None:
+        """Close live transports and background work before an entry reload."""
+        sessions = tuple(self.sessions.values())
+        self.sessions.clear()
+        for task in (*self._watchdog_tasks.values(), *self._refresh_tasks.values()):
+            task.cancel()
+        self._watchdog_tasks.clear()
+        self._refresh_tasks.clear()
+        for future in self._pending_acks.values():
+            if not future.done():
+                future.set_exception(ConnectionError("integration_unloaded"))
+        self._pending_acks.clear()
+        for queue in self.streams.values():
+            try:
+                queue.put_nowait(None)
+            except asyncio.QueueFull:
+                # Shutdown is authoritative: discard one buffered chunk so a
+                # blocked stream consumer always receives the end marker.
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+                queue.put_nowait(None)
+        self.streams.clear()
+        for session in sessions:
+            if not session.websocket.closed:
+                await session.websocket.close(code=1012, message=b"integration reload")
+        changed = False
+        for device in self.storage.devices.values():
+            if device.online:
+                device.online = False
+                device.last_seen = utc_iso()
+                changed = True
+        if changed:
+            await self.storage.async_save()
+
     async def async_create_pairing(
         self,
         *,
