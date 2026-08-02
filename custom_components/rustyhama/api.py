@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from typing import Any, ClassVar
 
+import voluptuous as vol
 from aiohttp import WSMsgType, web
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
@@ -22,6 +23,7 @@ from .const import (
     PROVIDER_PATH,
     STREAM_PATH,
 )
+from .protocol import envelope
 from .schema import referenced_providers
 
 
@@ -98,8 +100,10 @@ class DeviceWebSocketView(HomeAssistantView):
                 if item.type == WSMsgType.TEXT:
                     try:
                         await manager.async_handle_message(session, json.loads(item.data))
-                    except (ValueError, TypeError, json.JSONDecodeError) as err:
-                        await websocket.send_json({"type": "error", "error": str(err)})
+                    except (ValueError, TypeError, json.JSONDecodeError, vol.Invalid) as err:
+                        await websocket.send_json(
+                            envelope("protocol_error", {"error": str(err)})
+                        )
                 elif item.type in (WSMsgType.ERROR, WSMsgType.CLOSE, WSMsgType.CLOSED):
                     break
         finally:
@@ -150,8 +154,11 @@ class PanelJavaScriptView(HomeAssistantView):
 
     async def get(self, request: web.Request) -> web.Response:
         path = Path(__file__).parent / "frontend" / "panel.js"
+        source = await _manager(request).hass.async_add_executor_job(
+            path.read_text, "utf-8"
+        )
         return web.Response(
-            text=path.read_text(encoding="utf-8"),
+            text=source,
             content_type="text/javascript",
             headers={"Cache-Control": "no-store"},
         )

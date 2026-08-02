@@ -24,6 +24,9 @@ test('viewport fit preserves aspect ratio', () => {
   assert.equal(fit(480, 800, 1000, 1000), 1);
   assert.match(panel, /flex:0 0 auto/);
   assert.doesNotMatch(panel, /\.device\{[^}]*flex-shrink:/);
+  assert.match(panel, /previewZoom='fit'/);
+  assert.match(panel, /deviceFrame/);
+  assert.match(panel, /overflow:auto/);
 });
 
 test('JSON editor provides syntax highlighting and line numbers', () => {
@@ -41,6 +44,9 @@ test('preview uses the server compiler and native grid fields', () => {
   for (const field of ['cell_height', 'rowspan', 'colspan', 'data-preview-tab']) {
     assert.ok(panel.includes(field), `missing ${field}`);
   }
+  assert.match(panel, /preview-modal/);
+  assert.match(panel, /image-placeholder/);
+  assert.doesNotMatch(panel, /camera_proxy/);
 });
 
 test('visual editor exposes real theme and widget fields', () => {

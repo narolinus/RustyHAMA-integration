@@ -207,6 +207,9 @@ class RustyManager:
     async def async_attach(self, device: DeviceRecord, websocket: Any) -> DeviceSession:
         """Replace any prior live session for a device."""
         old = self.sessions.pop(device.device_id, None)
+        old_watchdog = self._watchdog_tasks.pop(device.device_id, None)
+        if old_watchdog is not None:
+            old_watchdog.cancel()
         if old is not None and not old.websocket.closed:
             await old.websocket.close(code=4001, message=b"replaced")
         device.session_generation += 1
@@ -446,6 +449,8 @@ class RustyManager:
         try:
             while self.sessions.get(session.device_id) is session:
                 await asyncio.sleep(OFFLINE_AFTER_SECONDS)
+                if self.sessions.get(session.device_id) is not session:
+                    return
                 silence = time.monotonic() - session.last_activity_monotonic
                 if silence < OFFLINE_AFTER_SECONDS:
                     continue
@@ -504,9 +509,16 @@ class RustyManager:
             if compilation is None:
                 compilation = self._compile(device)
             if entity_id in compilation.entity_ids and not session.websocket.closed:
-                await session.websocket.send_json(
-                    envelope("state", {"state": new_state.as_dict()})
-                )
+                try:
+                    await session.websocket.send_json(
+                        envelope("state", {"state": new_state.as_dict()})
+                    )
+                except (ConnectionError, RuntimeError):
+                    # aiohttp can transition to closing after the closed check but
+                    # before the frame write. Detach only if this is still the active
+                    # generation; replacement sessions must remain untouched.
+                    await self.async_detach(session)
+                    continue
             if compilation.dynamic:
                 self._schedule_dashboard_refresh(device_id)
 
