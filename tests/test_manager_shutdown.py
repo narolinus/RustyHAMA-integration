@@ -38,7 +38,7 @@ async def test_shutdown_closes_orphanable_sessions_and_background_work() -> None
     assert manager.sessions == {}
     watchdog.cancel.assert_called_once_with()
     refresh.cancel.assert_called_once_with()
-    websocket.close.assert_awaited_once_with(code=1012, message=b"integration reload")
+    websocket.close.assert_awaited_once_with(code=1001, message=b"integration reload")
     assert isinstance(pending.exception(), ConnectionError)
     assert await stream.get() is None
     assert device.online is False

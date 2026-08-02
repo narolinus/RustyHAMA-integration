@@ -154,7 +154,10 @@ class RustyManager:
         self.streams.clear()
         for session in sessions:
             if not session.websocket.closed:
-                await session.websocket.close(code=1012, message=b"integration reload")
+                # OkHttp 3.x on legacy Android rejects RFC 6455's later 1012
+                # service-restart code as reserved. 1001 communicates the same
+                # intentional server departure and is understood by all clients.
+                await session.websocket.close(code=1001, message=b"integration reload")
         changed = False
         for device in self.storage.devices.values():
             if device.online:
