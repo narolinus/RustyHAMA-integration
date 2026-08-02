@@ -22,6 +22,8 @@ test('viewport fit preserves aspect ratio', () => {
   assert.equal(fit(1920, 1080, 960, 800), 0.5);
   assert.equal(fit(800, 1280, 1000, 640), 0.5);
   assert.equal(fit(480, 800, 1000, 1000), 1);
+  assert.match(panel, /flex:0 0 auto/);
+  assert.doesNotMatch(panel, /\.device\{[^}]*flex-shrink:/);
 });
 
 test('JSON editor provides syntax highlighting and line numbers', () => {
@@ -29,6 +31,9 @@ test('JSON editor provides syntax highlighting and line numbers', () => {
   assert.match(panel, /line-numbers/);
   assert.match(panel, /json-key/);
   assert.match(panel, /selectionStart/);
+  assert.match(panel, /highlight\.scrollTop=ed\.scrollTop/);
+  assert.match(panel, /lines\.scrollTop=ed\.scrollTop/);
+  assert.doesNotMatch(panel, /highlight'\)\.style\.transform/);
 });
 
 test('preview uses the server compiler and native grid fields', () => {
