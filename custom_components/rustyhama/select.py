@@ -14,7 +14,12 @@ from .models import DeviceRecord
 
 SPECS = {
     "active_tab": ("Active tab", "runtime.active_tab", ["0"], "0"),
-    "audio_route": ("Audio route", "voice_assistant.audio_route", ["default", "speaker", "bluetooth"], "default"),
+    "audio_route": (
+        "Audio route",
+        "voice_assistant.audio_route",
+        ["system", "speakerphone", "earpiece"],
+        "system",
+    ),
     "vad": ("Voice activity detection", "voice_assistant.vad", ["server", "device"], "server"),
     "camera_transport": ("Camera transport", "device_cameras.transport", ["direct", "tunnel"], "direct"),
 }
