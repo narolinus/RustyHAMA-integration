@@ -29,6 +29,9 @@ test('viewport fit preserves aspect ratio', () => {
   assert.match(panel, /overflow:auto/);
   assert.match(panel, /wrap\.scrollLeft=/);
   assert.match(panel, /wrap\.scrollTop=/);
+  assert.match(panel, /id="devicePreview"/);
+  assert.match(panel, /querySelector\('#devicePreview'\)/);
+  assert.equal((panel.match(/id="device"/g) || []).length, 1);
 });
 
 test('JSON editor provides syntax highlighting and line numbers', () => {
@@ -92,6 +95,8 @@ test('pairing creates a QR element using its data property', () => {
 
 test('preview loads the bundled Material Symbols font', () => {
   assert.match(panel, /@font-face/);
+  assert.match(panel, /new FontFace\('Material Symbols Outlined'/);
+  assert.match(panel, /document\.fonts\.add/);
   assert.match(panel, /MaterialSymbolsOutlined\.ttf/);
   assert.match(panel, /font-variation-settings/);
 });
