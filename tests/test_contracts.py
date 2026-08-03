@@ -8,6 +8,7 @@ import pytest
 import voluptuous as vol
 
 from custom_components.rustyhama.api import (
+    DeviceMessageView,
     DeviceWebSocketView,
     PanelFontView,
     PanelJavaScriptView,
@@ -102,6 +103,16 @@ def test_device_control_channel_uses_application_heartbeat() -> None:
     assert "WebSocketResponse(max_msg_size=" in control_view
     assert "heartbeat=" not in control_view
     assert DeviceWebSocketView.requires_auth is False
+
+
+def test_device_message_fallback_is_device_authenticated() -> None:
+    source = Path("custom_components/rustyhama/api.py").read_text()
+    view = source[
+        source.index("class DeviceMessageView") : source.index("class DeviceStreamView")
+    ]
+    assert DeviceMessageView.requires_auth is False
+    assert "manager.authenticate" in view
+    assert "manager.async_handle_message" in view
 
 
 def test_provider_proxies_preserve_android_compatibility_contract() -> None:

@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
+    DEVICE_MESSAGE_PATH,
     DEVICE_WS_PATH,
     DOMAIN,
     MA_PROVIDER_PATH,
@@ -139,6 +140,32 @@ class DeviceWebSocketView(HomeAssistantView):
             if session is not None:
                 await manager.async_detach(session)
         return websocket
+
+
+class DeviceMessageView(HomeAssistantView):
+    """Authenticated fallback for critical device-to-HA protocol frames."""
+
+    url = DEVICE_MESSAGE_PATH
+    name = "api:rustyhama:device_messages"
+    requires_auth = False
+
+    async def post(self, request: web.Request) -> web.Response:
+        if not request.secure:
+            raise web.HTTPUpgradeRequired(text="HTTPS required")
+        device_id, credential = _device_auth(request)
+        manager = _manager(request)
+        device = manager.authenticate(device_id, credential)
+        if device is None:
+            raise web.HTTPUnauthorized()
+        session = manager.sessions.get(device.device_id)
+        if session is None or session.websocket.closed:
+            raise web.HTTPConflict(text="device session unavailable")
+        try:
+            raw = await request.json()
+            await manager.async_handle_message(session, raw)
+        except (ValueError, TypeError, json.JSONDecodeError, vol.Invalid) as err:
+            return self.json({"error": str(err)}, status_code=400)
+        return self.json({"success": True})
 
 
 class DeviceStreamView(HomeAssistantView):
@@ -401,6 +428,7 @@ def register_http_views(hass: HomeAssistant) -> None:
     """Register all HTTP views once."""
     hass.http.register_view(PairView())
     hass.http.register_view(DeviceWebSocketView())
+    hass.http.register_view(DeviceMessageView())
     hass.http.register_view(DeviceStreamView())
     hass.http.register_view(PanelJavaScriptView())
     hass.http.register_view(PanelFontView())
