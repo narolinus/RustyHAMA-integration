@@ -14,7 +14,7 @@ from .models import DeviceRecord
 
 SPECS = {
     "brightness": ("Brightness", "display.brightness", 0, 100, 1, PERCENTAGE, 100),
-    "camera_fps": ("Camera FPS", "device_cameras.stream_fps", 1, 15, 1, "fps", 5),
+    "camera_fps": ("Camera FPS", "device_cameras.stream_fps", 1, 30, 1, "fps", 5),
     "camera_quality": ("Camera JPEG quality", "device_cameras.jpeg_quality", 30, 95, 1, PERCENTAGE, 75),
     "camera_max_width": ("Camera maximum width", "device_cameras.max_width", 320, 1920, 16, "px", 1280),
     "sensor_interval": ("Sensor interval", "sensors.interval", 1, 3600, 1, UnitOfTime.SECONDS, 30),
