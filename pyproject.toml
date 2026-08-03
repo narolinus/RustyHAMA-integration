@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rustyhama-integration"
-version = "0.1.20"
+version = "0.1.21"
 requires-python = ">=3.14"
 dependencies = ["homeassistant>=2026.7.0,<2026.8"]
 
