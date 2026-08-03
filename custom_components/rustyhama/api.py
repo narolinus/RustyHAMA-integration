@@ -321,6 +321,31 @@ class MusicAssistantProviderView(HomeAssistantView):
                 content_type=response.content_type,
             )
 
+    async def post(
+        self, request: web.Request, provider_id: str, tail: str
+    ) -> web.StreamResponse:
+        """Forward stateless Music Assistant API commands for device clients."""
+        if not request.secure:
+            raise web.HTTPUpgradeRequired(text="HTTPS required")
+        provider = self._provider(request, provider_id)
+        if tail != "api":
+            raise web.HTTPNotFound()
+        url = str(provider["url"]).rstrip("/") + "/api"
+        headers = {
+            "Authorization": f"Bearer {provider['token']}",
+            "Content-Type": request.content_type or "application/json",
+            "Accept": "application/json",
+        }
+        session = async_get_clientsession(_manager(request).hass)
+        async with session.post(
+            url, params=request.query, headers=headers, data=await request.read()
+        ) as response:
+            return web.Response(
+                body=await response.read(),
+                status=response.status,
+                content_type=response.content_type,
+            )
+
     async def _websocket(
         self, request: web.Request, provider: dict[str, Any]
     ) -> web.StreamResponse:

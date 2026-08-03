@@ -118,6 +118,8 @@ def test_provider_proxies_preserve_android_compatibility_contract() -> None:
     ]
     assert 'for name in ("Accept", "Content-Type")' in immich
     assert 'tail != "imageproxy"' in music
+    assert 'tail != "api"' in music
+    assert "session.post(" in music
     downstream = music[music.index("downstream =") : music.index("await downstream.prepare")]
     assert "heartbeat=" not in downstream
 
