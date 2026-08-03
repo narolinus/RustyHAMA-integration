@@ -113,6 +113,9 @@ def test_device_message_fallback_is_device_authenticated() -> None:
     assert DeviceMessageView.requires_auth is False
     assert "manager.authenticate" in view
     assert "manager.async_handle_message" in view
+    assert "validate_message(raw)" in view
+    assert "async_create_background_task" in view
+    assert "status_code=202" in view
 
 
 def test_provider_proxies_preserve_android_compatibility_contract() -> None:
