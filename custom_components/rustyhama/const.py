@@ -12,7 +12,6 @@ SUBENTRY_TYPE_DEVICE = "device"
 
 PAIR_PATH = "/api/rustyhama/v1/pair"
 DEVICE_WS_PATH = "/api/rustyhama/v1/device/ws"
-DEVICE_MESSAGE_PATH = "/api/rustyhama/v1/device/messages"
 STREAM_PATH = "/api/rustyhama/v1/device/streams/{session_id}"
 PROVIDER_PATH = "/api/rustyhama/v1/device/providers/{provider_id}/immich/{tail:.*}"
 MA_PROVIDER_PATH = (

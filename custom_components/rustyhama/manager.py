@@ -455,8 +455,6 @@ class RustyManager:
             revision=device.config_revision,
         )
         states = envelope("states", {"states": self._initial_states(compilation)})
-        self._queue_fallback(session, "configuration", configuration)
-        self._queue_fallback(session, "states", states)
         await self._async_try_ws_send(session, configuration)
         await self._async_try_ws_send(session, states)
         return True
@@ -482,22 +480,7 @@ class RustyManager:
         if session is None or session.websocket.closed:
             raise ConnectionError("device_unavailable")
         message = envelope(event, payload)
-        self._queue_fallback(session, f"event:{message['id']}", message)
         await self._async_try_ws_send(session, message)
-
-    def pull_fallback_messages(self, session: DeviceSession) -> list[dict[str, Any]]:
-        """Return queued HA-to-device frames for an authenticated heartbeat poll."""
-        messages = list(session.pending.values())
-        messages.extend(session.outbox.values())
-        session.outbox.clear()
-        return messages
-
-    def _queue_fallback(
-        self, session: DeviceSession, key: str, message: dict[str, Any]
-    ) -> None:
-        session.outbox[key] = message
-        while len(session.outbox) > 64:
-            session.outbox.pop(next(iter(session.outbox)))
 
     async def _async_try_ws_send(
         self, session: DeviceSession, message: dict[str, Any]
@@ -651,7 +634,6 @@ class RustyManager:
                     "state",
                     {"state": self._json_compatible(new_state.as_dict())},
                 )
-                self._queue_fallback(session, f"state:{entity_id}", message)
                 try:
                     await session.websocket.send_json(message)
                 except Exception:
@@ -707,7 +689,6 @@ class RustyManager:
         else:
             payload = {"success": True, "result": self._json_compatible(result)}
         response = envelope("request_result", payload, message_id=message["id"])
-        self._queue_fallback(session, f"response:{message['id']}", response)
         await self._async_try_ws_send(session, response)
 
     async def _async_execute_device_request(
@@ -838,7 +819,6 @@ class RustyManager:
                 {"success": False, "error": "operation_not_allowed"},
                 message_id=message["id"],
             )
-            self._queue_fallback(session, f"response:{message['id']}", response)
             await self._async_try_ws_send(session, response)
             return
         data = dict(payload.get("data") or {})
@@ -851,5 +831,4 @@ class RustyManager:
         else:
             result = {"success": True}
         response = envelope("command_ack", result, message_id=message["id"])
-        self._queue_fallback(session, f"response:{message['id']}", response)
         await self._async_try_ws_send(session, response)

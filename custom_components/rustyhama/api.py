@@ -17,7 +17,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
-    DEVICE_MESSAGE_PATH,
     DEVICE_WS_PATH,
     DOMAIN,
     MA_PROVIDER_PATH,
@@ -141,58 +140,6 @@ class DeviceWebSocketView(HomeAssistantView):
             if session is not None:
                 await manager.async_detach(session)
         return websocket
-
-
-class DeviceMessageView(HomeAssistantView):
-    """Authenticated fallback for critical device-to-HA protocol frames."""
-
-    url = DEVICE_MESSAGE_PATH
-    name = "api:rustyhama:device_messages"
-    requires_auth = False
-
-    async def post(self, request: web.Request) -> web.Response:
-        if not request.secure:
-            raise web.HTTPUpgradeRequired(text="HTTPS required")
-        device_id, credential = _device_auth(request)
-        manager = _manager(request)
-        device = manager.authenticate(device_id, credential)
-        if device is None:
-            raise web.HTTPUnauthorized()
-        session = manager.sessions.get(device.device_id)
-        if session is None or session.websocket.closed:
-            raise web.HTTPConflict(text="device session unavailable")
-        try:
-            raw = await request.json()
-            # Validate before acknowledging receipt, but do not couple the HTTP
-            # response to the control WebSocket.  This endpoint exists precisely
-            # for half-open sockets; async_handle_message may need to emit a
-            # heartbeat ACK on that socket and can therefore block on transport
-            # backpressure.  Returning immediately also lets command ACKs use a
-            # second, healthy connection to resolve the pending HA action.
-            validated = validate_message(raw)
-        except (ValueError, TypeError, json.JSONDecodeError, vol.Invalid) as err:
-            return self.json({"error": str(err)}, status_code=400)
-        manager.hass.async_create_background_task(
-            self._async_process(manager, session, raw),
-            f"RustyHAMA device fallback {device.device_id}",
-        )
-        messages = (
-            manager.pull_fallback_messages(session)
-            if validated["type"] == "heartbeat"
-            else []
-        )
-        return self.json(
-            {"success": True, "messages": messages}, status_code=202
-        )
-
-    async def _async_process(self, manager: Any, session: Any, raw: dict[str, Any]) -> None:
-        """Process a validated fallback frame without holding the HTTP response."""
-        try:
-            await manager.async_handle_message(session, raw)
-        except Exception:
-            _LOGGER.exception(
-                "RustyHAMA fallback message failed for %s", session.device_id
-            )
 
 
 class DeviceStreamView(HomeAssistantView):
@@ -488,7 +435,6 @@ def register_http_views(hass: HomeAssistant) -> None:
     """Register all HTTP views once."""
     hass.http.register_view(PairView())
     hass.http.register_view(DeviceWebSocketView())
-    hass.http.register_view(DeviceMessageView())
     hass.http.register_view(DeviceStreamView())
     hass.http.register_view(PanelJavaScriptView())
     hass.http.register_view(PanelFontView())

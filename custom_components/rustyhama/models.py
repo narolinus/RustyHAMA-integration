@@ -89,7 +89,6 @@ class DeviceSession:
     connected_at: str = field(default_factory=utc_iso)
     last_activity_monotonic: float = field(default_factory=time.monotonic)
     pending: dict[str, Any] = field(default_factory=dict)
-    outbox: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

@@ -9,7 +9,6 @@ import voluptuous as vol
 from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.rustyhama.api import (
-    DeviceMessageView,
     DeviceWebSocketView,
     PanelFontView,
     PanelJavaScriptView,
@@ -141,18 +140,13 @@ def test_device_control_channel_uses_application_heartbeat() -> None:
     assert DeviceWebSocketView.requires_auth is False
 
 
-def test_device_message_fallback_is_device_authenticated() -> None:
+def test_device_protocol_has_one_authoritative_transport() -> None:
     source = Path("custom_components/rustyhama/api.py").read_text()
-    view = source[
-        source.index("class DeviceMessageView") : source.index("class DeviceStreamView")
-    ]
-    assert DeviceMessageView.requires_auth is False
-    assert "manager.authenticate" in view
-    assert "manager.async_handle_message" in view
-    assert "validate_message(raw)" in view
-    assert "async_create_background_task" in view
-    assert "status_code=202" in view
-    assert "pull_fallback_messages" in view
+    manager = Path("custom_components/rustyhama/manager.py").read_text()
+    assert "class DeviceMessageView" not in source
+    assert "pull_fallback_messages" not in manager
+    assert "_queue_fallback" not in manager
+    assert "outbox" not in manager
 
 
 def test_provider_proxies_preserve_android_compatibility_contract() -> None:
