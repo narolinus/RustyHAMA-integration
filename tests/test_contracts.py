@@ -4,9 +4,9 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from homeassistant.exceptions import HomeAssistantError
 import pytest
 import voluptuous as vol
+from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.rustyhama.api import (
     DeviceMessageView,
