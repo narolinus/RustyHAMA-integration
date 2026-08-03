@@ -25,7 +25,7 @@ from .const import (
     PROVIDER_PATH,
     STREAM_PATH,
 )
-from .protocol import envelope, validate_message
+from .protocol import envelope
 from .schema import referenced_providers
 
 _LOGGER = logging.getLogger(__name__)
