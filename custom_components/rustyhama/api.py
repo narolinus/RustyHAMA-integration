@@ -93,10 +93,11 @@ class DeviceWebSocketView(HomeAssistantView):
         device = manager.authenticate(device_id, credential)
         if device is None:
             raise web.HTTPUnauthorized()
-        # Old Android/OkHttp combinations are unreliable with overlapping transport
-        # pings. RustyHAMA has a versioned application heartbeat and a server-side
-        # watchdog, so the control channel deliberately does not use aiohttp pings.
-        websocket = web.WebSocketResponse(max_msg_size=4 * 1024 * 1024)
+        # Keep the upgraded connection active through reverse proxies. The
+        # versioned application heartbeat remains the authoritative online state.
+        websocket = web.WebSocketResponse(
+            heartbeat=15, max_msg_size=4 * 1024 * 1024
+        )
         await websocket.prepare(request)
         session = None
         try:
@@ -383,9 +384,9 @@ class MusicAssistantProviderView(HomeAssistantView):
     async def _websocket(
         self, request: web.Request, provider: dict[str, Any]
     ) -> web.StreamResponse:
-        # The app-level watchdog is authoritative. Aiohttp transport pings are not
-        # reliable on the oldest supported Android/OkHttp combinations.
-        downstream = web.WebSocketResponse(max_msg_size=4 * 1024 * 1024)
+        downstream = web.WebSocketResponse(
+            heartbeat=15, max_msg_size=4 * 1024 * 1024
+        )
         await downstream.prepare(request)
         base = str(provider["url"]).rstrip("/")
         upstream_url = base.replace("https://", "wss://").replace("http://", "ws://")

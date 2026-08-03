@@ -131,12 +131,12 @@ def test_panel_module_can_be_loaded_without_auth_header() -> None:
     assert Path("custom_components/rustyhama/frontend/MaterialSymbolsOutlined.ttf").is_file()
 
 
-def test_device_control_channel_uses_application_heartbeat() -> None:
-    """Transport pings must not compete with Android's protocol heartbeat."""
+def test_device_control_channel_has_bounded_transport_heartbeat() -> None:
+    """The proxy detects dead transports while protocol heartbeat owns state."""
     source = Path("custom_components/rustyhama/api.py").read_text()
     control_view = source[source.index("class DeviceWebSocketView") : source.index("class DeviceStreamView")]
-    assert "WebSocketResponse(max_msg_size=" in control_view
-    assert "heartbeat=" not in control_view
+    assert "WebSocketResponse(" in control_view
+    assert "heartbeat=15" in control_view
     assert DeviceWebSocketView.requires_auth is False
 
 
@@ -167,7 +167,7 @@ def test_provider_proxies_preserve_android_compatibility_contract() -> None:
     assert "session.post(" in music
     assert "_external_image" in music
     downstream = music[music.index("downstream =") : music.index("await downstream.prepare")]
-    assert "heartbeat=" not in downstream
+    assert "heartbeat=15" in downstream
 
 
 def test_initial_states_are_json_serializable() -> None:

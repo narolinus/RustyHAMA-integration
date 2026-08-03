@@ -485,16 +485,21 @@ class RustyManager:
     async def _async_try_ws_send(
         self, session: DeviceSession, message: dict[str, Any]
     ) -> bool:
-        """Best-effort WebSocket delivery bounded independently of HTTP polling."""
+        """Deliver over the sole control channel or retire that failed session."""
         try:
             await asyncio.wait_for(session.websocket.send_json(message), timeout=1.0)
-        except Exception:
-            _LOGGER.debug(
-                "RustyHAMA WebSocket delivery deferred to HTTP poll for %s",
+        except Exception as err:
+            _LOGGER.warning(
+                "RustyHAMA WebSocket delivery failed for %s; closing session",
                 session.device_id,
                 exc_info=True,
             )
-            return False
+            if not session.websocket.closed:
+                await session.websocket.close(
+                    code=1011, message=b"control channel write failed"
+                )
+            await self.async_detach(session)
+            raise ConnectionError("device_channel_unavailable") from err
         return True
 
     async def async_stream(self, stream_id: str) -> AsyncIterator[bytes]:
