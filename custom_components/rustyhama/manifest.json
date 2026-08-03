@@ -3,12 +3,12 @@
   "name": "RustyHAMA",
   "codeowners": [],
   "config_flow": true,
-  "dependencies": ["assist_pipeline", "frontend", "http", "panel_custom", "recorder", "websocket_api"],
-  "documentation": "https://daniel.snii.de/RustyHAMA-Integration/",
+  "dependencies": ["assist_pipeline", "frontend", "http", "panel_custom", "recorder", "wake_word", "websocket_api"],
+  "documentation": "https://daniel.snii.de/RustyHAMA/",
   "integration_type": "hub",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/daniel/RustyHAMA-Integration/issues",
+  "issue_tracker": "https://dev.spittank.org/daniel/RustyHAMA-Integration/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.1.12"
+  "version": "0.1.13"
 }

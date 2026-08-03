@@ -55,6 +55,22 @@ def validate_dashboard(config: Any) -> list[str]:
                 raise DashboardValidationError(
                     f"tabs[{tab_index}].widgets[{widget_index}].type is required"
                 )
+    tab_order = config.get("tab_order")
+    if tab_order is not None:
+        if not isinstance(tab_order, list) or not all(
+            isinstance(tab_id, str) and tab_id for tab_id in tab_order
+        ):
+            raise DashboardValidationError("tab_order must be an array of tab ids")
+        if len(tab_order) != len(set(tab_order)):
+            raise DashboardValidationError("tab_order contains duplicate tab ids")
+        known_tabs = {
+            str(tab["id"]) for tab in tabs if isinstance(tab, dict) and tab.get("id")
+        }
+        unknown_tabs = set(tab_order) - known_tabs
+        if unknown_tabs:
+            raise DashboardValidationError(
+                f"tab_order contains unknown tab ids: {', '.join(sorted(unknown_tabs))}"
+            )
     return []
 
 

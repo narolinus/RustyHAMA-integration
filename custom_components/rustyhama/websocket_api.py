@@ -64,6 +64,7 @@ async def ws_compile_preview(
         vol.Optional("profile_id", default=DEFAULT_PROFILE_ID): str,
         vol.Optional("area_id"): vol.Any(str, None),
         vol.Optional("certificate_fingerprint"): str,
+        vol.Optional("public_key_pin"): str,
     }
 )
 @websocket_api.async_response
@@ -74,6 +75,7 @@ async def ws_create_pairing(hass: HomeAssistant, connection: Any, msg: dict[str,
         profile_id=msg["profile_id"],
         area_id=msg.get("area_id"),
         certificate_fingerprint=msg.get("certificate_fingerprint"),
+        public_key_pin=msg.get("public_key_pin"),
     )
     connection.send_result(msg["id"], result)
 
@@ -104,6 +106,40 @@ async def ws_save_profile(hass: HomeAssistant, connection: Any, msg: dict[str, A
     }
     await manager.storage.async_save()
     connection.send_result(msg["id"], {"warnings": warnings})
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {vol.Required("type"): "rustyhama/delete_profile", vol.Required("profile_id"): str}
+)
+@websocket_api.async_response
+async def ws_delete_profile(
+    hass: HomeAssistant, connection: Any, msg: dict[str, Any]
+) -> None:
+    """Delete an unused non-default profile."""
+    manager = _manager(hass)
+    profile_id = msg["profile_id"]
+    if profile_id == DEFAULT_PROFILE_ID:
+        connection.send_error(msg["id"], "profile_in_use", "The default profile cannot be deleted")
+        return
+    if profile_id not in manager.storage.profiles:
+        connection.send_error(msg["id"], "unknown_profile", "Profile not found")
+        return
+    assigned = [
+        device.name
+        for device in manager.storage.devices.values()
+        if device.profile_id == profile_id
+    ]
+    if assigned:
+        connection.send_error(
+            msg["id"],
+            "profile_in_use",
+            f"Profile is assigned to: {', '.join(sorted(assigned))}",
+        )
+        return
+    manager.storage.profiles.pop(profile_id)
+    await manager.storage.async_save()
+    connection.send_result(msg["id"], {"success": True})
 
 
 @websocket_api.require_admin
@@ -167,6 +203,10 @@ async def ws_update_device(hass: HomeAssistant, connection: Any, msg: dict[str, 
     device = manager.storage.devices.get(msg["device_id"])
     if device is None:
         connection.send_error(msg["id"], "unknown_device", "Device not found")
+        return
+    requested_profile = msg.get("profile_id")
+    if requested_profile is not None and requested_profile not in manager.storage.profiles:
+        connection.send_error(msg["id"], "unknown_profile", "Profile not found")
         return
     for field in ("name", "profile_id", "override", "provider_bindings"):
         if field in msg:
@@ -242,6 +282,7 @@ COMMANDS = (
     ws_compile_preview,
     ws_create_pairing,
     ws_save_profile,
+    ws_delete_profile,
     ws_publish_profile,
     ws_rollback,
     ws_update_device,

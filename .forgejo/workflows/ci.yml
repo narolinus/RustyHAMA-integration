@@ -13,20 +13,6 @@ jobs:
       - run: mypy custom_components/rustyhama
       - run: pytest
       - run: node --test tests/frontend.test.mjs
-      - run: python3 scripts/check_docs.py
-      - run: zensical build --clean --strict
-      - run: zensical build --config-file zensical.en.toml --clean --strict
-      - run: zensical build --config-file zensical.fr.toml --clean --strict
-      - run: |
-          python3 scripts/copy_docs_assets.py
-          touch site/.nojekyll
-      - name: Publish documentation
-        if: forgejo.event_name == 'push'
-        uses: https://codeberg.org/git-pages/action@v2
-        with:
-          site: "https://daniel.snii.de/RustyHAMA-Integration/"
-          token: "${{ forgejo.token }}"
-          source: "site/"
 
   validate-hacs:
     runs-on: docker

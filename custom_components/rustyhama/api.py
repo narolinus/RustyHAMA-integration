@@ -194,6 +194,23 @@ class PanelJavaScriptView(HomeAssistantView):
         )
 
 
+class PanelFontView(HomeAssistantView):
+    """Serve the same Material Symbols font used by the Android dashboard."""
+
+    url = f"{PANEL_PATH}/MaterialSymbolsOutlined.ttf"
+    name = "api:rustyhama:frontend_font"
+    requires_auth = False
+
+    async def get(self, request: web.Request) -> web.Response:
+        path = Path(__file__).parent / "frontend" / "MaterialSymbolsOutlined.ttf"
+        source = await _manager(request).hass.async_add_executor_job(path.read_bytes)
+        return web.Response(
+            body=source,
+            content_type="font/ttf",
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        )
+
+
 class ImmichProviderView(HomeAssistantView):
     """Proxy a narrow Immich API surface without exposing its key."""
 
@@ -361,5 +378,6 @@ def register_http_views(hass: HomeAssistant) -> None:
     hass.http.register_view(DeviceWebSocketView())
     hass.http.register_view(DeviceStreamView())
     hass.http.register_view(PanelJavaScriptView())
+    hass.http.register_view(PanelFontView())
     hass.http.register_view(ImmichProviderView())
     hass.http.register_view(MusicAssistantProviderView())

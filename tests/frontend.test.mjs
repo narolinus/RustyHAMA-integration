@@ -27,6 +27,8 @@ test('viewport fit preserves aspect ratio', () => {
   assert.match(panel, /previewZoom='fit'/);
   assert.match(panel, /deviceFrame/);
   assert.match(panel, /overflow:auto/);
+  assert.match(panel, /wrap\.scrollLeft=/);
+  assert.match(panel, /wrap\.scrollTop=/);
 });
 
 test('JSON editor provides syntax highlighting and line numbers', () => {
@@ -68,4 +70,28 @@ test('visual editor exposes real theme and widget fields', () => {
 test('widget documentation is linked from the panel', () => {
   assert.match(panel, /https:\/\/daniel\.snii\.de\/RustyHAMA\//);
   assert.match(panel, /Widget-Dokumentation/);
+});
+
+test('profiles, device overrides and tab ordering are manageable', () => {
+  for (const contract of [
+    'delete_profile',
+    'profileCreate',
+    'data-profile-rename',
+    'data-device-profile-save',
+    'data-override-open',
+  ]) {
+    assert.ok(panel.includes(contract), `missing ${contract}`);
+  }
+});
+
+test('pairing creates a QR element using its data property', () => {
+  assert.match(panel, /document\.createElement\('ha-qr-code'\)/);
+  assert.match(panel, /qrCode\.data=qr/);
+  assert.match(panel, /public_key_pin/);
+});
+
+test('preview loads the bundled Material Symbols font', () => {
+  assert.match(panel, /@font-face/);
+  assert.match(panel, /MaterialSymbolsOutlined\.ttf/);
+  assert.match(panel, /font-variation-settings/);
 });

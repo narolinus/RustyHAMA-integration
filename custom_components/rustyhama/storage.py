@@ -15,7 +15,7 @@ from .const import (
     STORAGE_KEY,
     STORAGE_VERSION,
 )
-from .merge import merge_patch
+from .merge import apply_tab_order, merge_patch
 from .models import DeviceRecord, utc_iso
 from .schema import validate_dashboard
 
@@ -70,7 +70,7 @@ class RustyStorage:
     def effective_config(self, device: DeviceRecord) -> dict[str, Any]:
         """Resolve profile and device override without expanding secrets."""
         profile = self.profiles.get(device.profile_id) or self.profiles[DEFAULT_PROFILE_ID]
-        config = merge_patch(profile["published"], device.override)
+        config = apply_tab_order(merge_patch(profile["published"], device.override))
         config["provider_bindings"] = deepcopy(device.provider_bindings)
         config["device"] = {
             "id": device.device_id,

@@ -21,6 +21,34 @@ def merge_patch(target: Any, patch: Any) -> Any:
     return result
 
 
+def apply_tab_order(config: dict[str, Any]) -> dict[str, Any]:
+    """Apply an optional partial tab order without replacing the tabs array.
+
+    RFC 7396 intentionally replaces arrays. ``tab_order`` is therefore a
+    RustyHAMA post-merge directive: listed tab ids are moved to the front in
+    the requested order and all unlisted tabs retain their profile order.
+    """
+    result = deepcopy(config)
+    tabs = result.get("tabs")
+    order = result.get("tab_order")
+    if not isinstance(tabs, list) or not isinstance(order, list):
+        return result
+    by_id = {
+        str(tab.get("id")): tab
+        for tab in tabs
+        if isinstance(tab, dict) and tab.get("id") is not None
+    }
+    requested = [str(tab_id) for tab_id in order]
+    selected = [by_id[tab_id] for tab_id in requested if tab_id in by_id]
+    selected_ids = set(requested)
+    result["tabs"] = selected + [
+        tab
+        for tab in tabs
+        if not isinstance(tab, dict) or str(tab.get("id")) not in selected_ids
+    ]
+    return result
+
+
 def redact_secrets(value: Any) -> Any:
     """Recursively remove values whose key denotes a secret."""
     from .const import SECRET_FIELDS

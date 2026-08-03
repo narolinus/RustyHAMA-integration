@@ -174,6 +174,7 @@ class RustyManager:
         profile_id: str,
         area_id: str | None,
         certificate_fingerprint: str | None = None,
+        public_key_pin: str | None = None,
     ) -> dict[str, Any]:
         """Create a short-lived manual and QR pairing authorization."""
         self._purge_pairings()
@@ -196,6 +197,7 @@ class RustyManager:
             "expires_in": PAIR_TTL_SECONDS,
             "max_attempts": PAIR_MAX_ATTEMPTS,
             "certificate_fingerprint": certificate_fingerprint or "",
+            "public_key_pin": public_key_pin or "",
         }
 
     async def async_complete_pairing(self, payload: dict[str, Any]) -> dict[str, Any]:

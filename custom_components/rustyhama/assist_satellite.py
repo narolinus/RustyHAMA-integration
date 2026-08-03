@@ -4,9 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 
-from homeassistant.components.assist_pipeline import PipelineEvent, PipelineStage
+from homeassistant.components import wake_word
+from homeassistant.components.assist_pipeline import (
+    PipelineEvent,
+    PipelineStage,
+    async_get_pipeline,
+)
 from homeassistant.components.assist_satellite import (
     AssistSatelliteAnnouncement,
     AssistSatelliteConfiguration,
@@ -37,6 +43,7 @@ class RustyAssistSatellite(RustyEntity, AssistSatelliteEntity):
     def __init__(self, manager: Any, device: DeviceRecord) -> None:
         super().__init__(manager, device, "assist_satellite")
         self._accept_task: asyncio.Task[Any] | None = None
+        self._available_wake_words: list[AssistSatelliteWakeWord] = []
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -45,6 +52,7 @@ class RustyAssistSatellite(RustyEntity, AssistSatelliteEntity):
                 self.hass, SIGNAL_ASSIST_START, self._async_assist_start
             )
         )
+        await self._async_refresh_wake_words()
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass, SIGNAL_ASSIST_EVENT, self._async_assist_event
@@ -74,12 +82,18 @@ class RustyAssistSatellite(RustyEntity, AssistSatelliteEntity):
     ) -> None:
         """Run a pipeline and always release Android from processing state."""
         try:
-            await self.async_accept_pipeline_from_satellite(
-                self.manager.async_stream(stream_id),
-                start_stage=start_stage,
-                end_stage=end_stage,
-                wake_word_phrase=payload.get("wake_word_phrase"),
-            )
+            selected = self._selected_wake_word()
+            if start_stage is PipelineStage.WAKE_WORD and selected:
+                await self._async_accept_selected_server_wake_word(
+                    stream_id, selected, end_stage
+                )
+            else:
+                await self.async_accept_pipeline_from_satellite(
+                    self.manager.async_stream(stream_id),
+                    start_stage=start_stage,
+                    end_stage=end_stage,
+                    wake_word_phrase=payload.get("wake_word_phrase"),
+                )
         except asyncio.CancelledError:
             raise
         except Exception as err:  # The device must not hang when a HA pipeline fails.
@@ -94,18 +108,13 @@ class RustyAssistSatellite(RustyEntity, AssistSatelliteEntity):
 
     @callback
     def async_get_configuration(self) -> AssistSatelliteConfiguration:
-        wake_words = [
-            AssistSatelliteWakeWord(
-                id=str(item["id"]),
-                wake_word=str(item.get("wake_word", item["id"])),
-                trained_languages=list(item.get("trained_languages", [])),
-            )
-            for item in self.device.capabilities.get("wake_words", [])
-            if isinstance(item, dict) and item.get("id")
-        ]
-        active = self.device.telemetry.get("active_wake_words", [])
+        active = (
+            self.manager.storage.effective_config(self.device)
+            .get("voice_assistant", {})
+            .get("active_wake_words", [])
+        )
         return AssistSatelliteConfiguration(
-            available_wake_words=wake_words,
+            available_wake_words=list(self._available_wake_words),
             active_wake_words=list(active) if isinstance(active, list) else [],
             max_active_wake_words=1,
         )
@@ -113,10 +122,76 @@ class RustyAssistSatellite(RustyEntity, AssistSatelliteEntity):
     async def async_set_configuration(
         self, config: AssistSatelliteConfiguration
     ) -> None:
-        await self.manager.async_send_command(
+        await self.manager.async_update_device_config(
             self.device.device_id,
-            "assist_configuration",
-            {"active_wake_words": config.active_wake_words},
+            {"voice_assistant": {"active_wake_words": config.active_wake_words}},
+        )
+
+    async def _async_refresh_wake_words(self) -> None:
+        """Cache wake words offered by the selected server-side engine."""
+        try:
+            pipeline = async_get_pipeline(self.hass, pipeline_id=self._resolve_pipeline())
+            entity_id = pipeline.wake_word_entity or wake_word.async_default_entity(self.hass)
+            if not entity_id:
+                return
+            engine = wake_word.async_get_wake_word_detection_entity(self.hass, entity_id)
+            if engine is None:
+                return
+            supported = await engine.get_supported_wake_words()
+            self._available_wake_words = [
+                AssistSatelliteWakeWord(
+                    id=str(item.id),
+                    wake_word=str(item.phrase or item.name or item.id),
+                    trained_languages=[],
+                )
+                for item in supported
+            ]
+            self.async_write_ha_state()
+        except (AttributeError, RuntimeError):
+            _LOGGER.debug("No server wake-word catalogue available", exc_info=True)
+
+    def _selected_wake_word(self) -> str | None:
+        active = self.async_get_configuration().active_wake_words
+        return active[0] if active else None
+
+    async def _async_accept_selected_server_wake_word(
+        self, stream_id: str, wake_word_id: str, end_stage: PipelineStage
+    ) -> None:
+        """Run the chosen server wake word, then continue the same stream at STT."""
+        pipeline = async_get_pipeline(self.hass, pipeline_id=self._resolve_pipeline())
+        entity_id = pipeline.wake_word_entity or wake_word.async_default_entity(self.hass)
+        if not entity_id:
+            raise RuntimeError("No wake word engine")
+        engine = wake_word.async_get_wake_word_detection_entity(self.hass, entity_id)
+        if engine is None:
+            raise RuntimeError(f"Wake word engine not found: {entity_id}")
+
+        raw_stream = self.manager.async_stream(stream_id)
+        elapsed_ms = 0
+
+        async def timed_audio() -> AsyncIterator[tuple[bytes, int]]:
+            nonlocal elapsed_ms
+            async for chunk in raw_stream:
+                timestamp = elapsed_ms
+                elapsed_ms += max(1, len(chunk) // 32)
+                yield chunk, timestamp
+
+        timed_iterator = timed_audio().__aiter__()
+        result = await engine.async_process_audio_stream(timed_iterator, wake_word_id)
+        if result is None:
+            return
+
+        async def speech_audio() -> AsyncIterator[bytes]:
+            for chunk, _timestamp in result.queued_audio or []:
+                yield chunk
+            async for chunk, _timestamp in timed_iterator:
+                yield chunk
+
+        await self.async_accept_pipeline_from_satellite(
+            speech_audio(),
+            start_stage=PipelineStage.STT,
+            end_stage=end_stage,
+            wake_word_phrase=result.wake_word_phrase,
         )
 
     @callback

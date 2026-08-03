@@ -7,10 +7,14 @@ from pathlib import Path
 import pytest
 import voluptuous as vol
 
-from custom_components.rustyhama.api import DeviceWebSocketView, PanelJavaScriptView
+from custom_components.rustyhama.api import (
+    DeviceWebSocketView,
+    PanelFontView,
+    PanelJavaScriptView,
+)
 from custom_components.rustyhama.dashboard_compiler import Compilation
 from custom_components.rustyhama.manager import RustyManager
-from custom_components.rustyhama.merge import merge_patch, redact_secrets
+from custom_components.rustyhama.merge import apply_tab_order, merge_patch, redact_secrets
 from custom_components.rustyhama.models import DeviceRecord
 from custom_components.rustyhama.protocol import envelope, validate_message
 from custom_components.rustyhama.schema import DashboardValidationError, validate_dashboard
@@ -21,6 +25,30 @@ def test_merge_patch_vectors() -> None:
     vectors = json.loads(Path("test-vectors/merge-patch.json").read_text())
     for vector in vectors:
         assert merge_patch(vector["profile"], vector["patch"]) == vector["result"]
+
+
+def test_partial_tab_order_preserves_unlisted_profile_tabs() -> None:
+    config = {
+        "tabs": [
+            {"id": "overview"},
+            {"id": "climate"},
+            {"id": "music"},
+            {"id": "settings"},
+        ],
+        "tab_order": ["music", "overview"],
+    }
+    assert [tab["id"] for tab in apply_tab_order(config)["tabs"]] == [
+        "music",
+        "overview",
+        "climate",
+        "settings",
+    ]
+    assert [tab["id"] for tab in config["tabs"]] == [
+        "overview",
+        "climate",
+        "music",
+        "settings",
+    ]
 
 
 def test_protocol_round_trip() -> None:
@@ -39,6 +67,21 @@ def test_dashboard_validation() -> None:
     assert validate_dashboard({"schema_version": 1, "tabs": [{"id": "a", "widgets": []}]}) == []
     with pytest.raises(DashboardValidationError):
         validate_dashboard({"schema_version": 1, "tabs": []})
+    assert validate_dashboard(
+        {
+            "schema_version": 1,
+            "tabs": [{"id": "a", "widgets": []}, {"id": "b", "widgets": []}],
+            "tab_order": ["b", "a"],
+        }
+    ) == []
+    with pytest.raises(DashboardValidationError, match="unknown tab ids"):
+        validate_dashboard(
+            {
+                "schema_version": 1,
+                "tabs": [{"id": "a", "widgets": []}],
+                "tab_order": ["missing"],
+            }
+        )
 
 
 def test_secret_redaction_is_recursive() -> None:
@@ -48,6 +91,8 @@ def test_secret_redaction_is_recursive() -> None:
 
 def test_panel_module_can_be_loaded_without_auth_header() -> None:
     assert PanelJavaScriptView.requires_auth is False
+    assert PanelFontView.requires_auth is False
+    assert Path("custom_components/rustyhama/frontend/MaterialSymbolsOutlined.ttf").is_file()
 
 
 def test_device_control_channel_uses_application_heartbeat() -> None:
