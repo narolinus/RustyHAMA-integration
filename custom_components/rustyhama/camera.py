@@ -3,14 +3,23 @@
 from __future__ import annotations
 
 import base64
+import logging
 from typing import Any
+from urllib.parse import urlsplit
 
+from aiohttp import ClientError, ClientTimeout
 from homeassistant.components.camera import Camera, CameraEntityFeature
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .entity import RustyEntity, async_setup_dynamic_entities
 from .models import DeviceRecord
+
+
+_LOGGER = logging.getLogger(__name__)
+_MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024
+_DIRECT_CAMERA_PORT = 8765
 
 
 class RustyCamera(RustyEntity, Camera):
@@ -43,14 +52,63 @@ class RustyCamera(RustyEntity, Camera):
     async def async_camera_image(
         self, width: int | None = None, height: int | None = None
     ) -> bytes | None:
+        """Return a snapshot without burdening the persistent control channel."""
+        direct_url = self._direct_snapshot_url()
+        if direct_url is not None:
+            try:
+                session = async_get_clientsession(self.hass)
+                async with session.get(
+                    direct_url, timeout=ClientTimeout(total=5)
+                ) as response:
+                    response.raise_for_status()
+                    content_type = response.headers.get("Content-Type", "")
+                    if not content_type.lower().startswith("image/"):
+                        raise ValueError("camera_response_is_not_an_image")
+                    snapshot = await response.read()
+                    if not snapshot or len(snapshot) > _MAX_SNAPSHOT_BYTES:
+                        raise ValueError("camera_response_has_invalid_size")
+                    return snapshot
+            except (ClientError, TimeoutError, ValueError):
+                _LOGGER.debug(
+                    "Direct RustyHAMA camera snapshot failed for %s camera %s; "
+                    "falling back to the device channel",
+                    self.device.device_id,
+                    self.camera_id,
+                    exc_info=True,
+                )
+
         result = await self.manager.async_send_command(
             self.device.device_id,
             "camera_snapshot",
             {"camera_id": self.camera_id, "width": width, "height": height},
-            timeout=20,
+            timeout=4,
         )
         encoded = result.get("jpeg")
         return base64.b64decode(encoded) if isinstance(encoded, str) else None
+
+    def _direct_snapshot_url(self) -> str | None:
+        """Return a validated direct snapshot URL advertised by this device."""
+        cameras = self.device.telemetry.get("cameras", {})
+        data = cameras.get(self.camera_id, {}) if isinstance(cameras, dict) else {}
+        url = data.get("snapshot_url") if isinstance(data, dict) else None
+        device_ip = self.device.telemetry.get("ip_address")
+        if (
+            not isinstance(url, str)
+            or not isinstance(device_ip, str)
+            or data.get("transport") != "direct"
+        ):
+            return None
+        parsed = urlsplit(url)
+        if (
+            parsed.scheme != "http"
+            or parsed.hostname != device_ip
+            or parsed.port != _DIRECT_CAMERA_PORT
+            or not parsed.path.startswith(f"/device_camera/{self.camera_id}/")
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
+            return None
+        return url
 
     async def stream_source(self) -> str | None:
         """Return a direct pinned LAN URL when the device advertises one."""
