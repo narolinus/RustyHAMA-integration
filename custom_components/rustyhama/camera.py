@@ -16,7 +16,6 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .entity import RustyEntity, async_setup_dynamic_entities
 from .models import DeviceRecord
 
-
 _LOGGER = logging.getLogger(__name__)
 _MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024
 _DIRECT_CAMERA_PORT = 8765
