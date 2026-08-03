@@ -14,6 +14,17 @@ from .const import DOMAIN, SIGNAL_DEVICE_UPDATED, SIGNAL_DEVICES_CHANGED
 from .models import DeviceRecord
 
 
+def local_privacy_locked(device: DeviceRecord, feature: str) -> bool:
+    """Return a device-local privacy lock that HA is not allowed to override."""
+    telemetry_locks = device.telemetry.get("privacy_locks")
+    if isinstance(telemetry_locks, dict) and feature in telemetry_locks:
+        return bool(telemetry_locks[feature])
+    capability_locks = device.capabilities.get("privacy_locks")
+    return bool(
+        isinstance(capability_locks, dict) and capability_locks.get(feature, False)
+    )
+
+
 class RustyEntity(Entity):
     """Base entity backed by a paired Android device."""
 

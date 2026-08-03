@@ -16,7 +16,7 @@ from homeassistant.helpers.aiohttp_client import (
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .camera_url import validated_direct_snapshot_url, validated_direct_stream_url
-from .entity import RustyEntity, async_setup_dynamic_entities
+from .entity import RustyEntity, async_setup_dynamic_entities, local_privacy_locked
 from .models import DeviceRecord
 
 _LOGGER = logging.getLogger(__name__)
@@ -46,6 +46,7 @@ class RustyCamera(RustyEntity, Camera):
         )
         return bool(
             self.device.online
+            and not local_privacy_locked(self.device, "camera")
             and isinstance(config, dict)
             and config.get("enabled", False)
         )
@@ -54,6 +55,8 @@ class RustyCamera(RustyEntity, Camera):
         self, width: int | None = None, height: int | None = None
     ) -> bytes | None:
         """Return a snapshot without burdening the persistent control channel."""
+        if local_privacy_locked(self.device, "camera"):
+            return None
         direct_url = self._direct_snapshot_url()
         if direct_url is not None:
             try:
@@ -119,6 +122,8 @@ class RustyCamera(RustyEntity, Camera):
         self, request: web.Request
     ) -> web.StreamResponse | None:
         """Proxy the native device MJPEG stream without reducing its frame rate."""
+        if local_privacy_locked(self.device, "camera"):
+            return None
         direct_url = self._direct_stream_url()
         if direct_url is None:
             return await super().handle_async_mjpeg_stream(request)

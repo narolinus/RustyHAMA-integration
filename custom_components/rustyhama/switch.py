@@ -7,6 +7,7 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -14,6 +15,7 @@ from .const import DOMAIN
 from .entity import (
     RustyEntity,
     async_setup_dynamic_entities,
+    local_privacy_locked,
     nested_patch,
     nested_value,
 )
@@ -38,10 +40,32 @@ class RustySwitch(RustyEntity, SwitchEntity):
 
     @property
     def is_on(self) -> bool:
+        feature = self._privacy_feature()
+        if feature is not None and local_privacy_locked(self.device, feature):
+            return False
         config = self.manager.storage.effective_config(self.device)
         return bool(nested_value(config, self.path, self.default))
 
+    @property
+    def extra_state_attributes(self) -> dict[str, bool] | None:
+        feature = self._privacy_feature()
+        if feature is None:
+            return None
+        return {"local_privacy_lock": local_privacy_locked(self.device, feature)}
+
+    def _privacy_feature(self) -> str | None:
+        if self.entity_key == "camera_enabled":
+            return "camera"
+        if self.entity_key in {"voice_enabled", "wake_word"}:
+            return "voice_assist"
+        return None
+
     async def async_turn_on(self, **kwargs: Any) -> None:
+        feature = self._privacy_feature()
+        if feature is not None and local_privacy_locked(self.device, feature):
+            raise HomeAssistantError(
+                "This feature is blocked by the local device privacy lock"
+            )
         await self.manager.async_update_device_config(
             self.device.device_id, nested_patch(self.path, True)
         )

@@ -21,11 +21,12 @@ from homeassistant.components.assist_satellite import (
     AssistSatelliteWakeWord,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import SIGNAL_ASSIST_EVENT, SIGNAL_ASSIST_START
-from .entity import RustyEntity, async_setup_dynamic_entities
+from .entity import RustyEntity, async_setup_dynamic_entities, local_privacy_locked
 from .models import DeviceRecord
 
 _LOGGER = logging.getLogger(__name__)
@@ -45,6 +46,13 @@ class RustyAssistSatellite(RustyEntity, AssistSatelliteEntity):
         self._accept_task: asyncio.Task[Any] | None = None
         self._available_wake_words: list[AssistSatelliteWakeWord] = []
 
+    @property
+    def available(self) -> bool:
+        """A local microphone privacy lock cannot be overridden by HA."""
+        return self.device.online and not local_privacy_locked(
+            self.device, "voice_assist"
+        )
+
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         self.async_on_remove(
@@ -61,7 +69,9 @@ class RustyAssistSatellite(RustyEntity, AssistSatelliteEntity):
 
     @callback
     def _async_assist_start(self, device_id: str, payload: dict[str, Any]) -> None:
-        if device_id != self.device.device_id:
+        if device_id != self.device.device_id or local_privacy_locked(
+            self.device, "voice_assist"
+        ):
             return
         if self._accept_task and not self._accept_task.done():
             self._accept_task.cancel()
@@ -231,6 +241,10 @@ class RustyAssistSatellite(RustyEntity, AssistSatelliteEntity):
     async def async_announce(
         self, announcement: AssistSatelliteAnnouncement
     ) -> None:
+        if local_privacy_locked(self.device, "voice_assist"):
+            raise HomeAssistantError(
+                "Voice Assist is blocked by the local device privacy lock"
+            )
         await self.manager.async_send_command(
             self.device.device_id,
             "assist_announce",

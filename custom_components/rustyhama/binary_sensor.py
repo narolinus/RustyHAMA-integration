@@ -9,7 +9,7 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .entity import RustyEntity, async_setup_dynamic_entities
+from .entity import RustyEntity, async_setup_dynamic_entities, local_privacy_locked
 from .models import DeviceRecord
 
 SPECS = {
@@ -19,6 +19,8 @@ SPECS = {
     "voice": ("Voice service", BinarySensorDeviceClass.RUNNING),
     "camera": ("Camera service", BinarySensorDeviceClass.RUNNING),
     "service": ("Foreground service", BinarySensorDeviceClass.RUNNING),
+    "camera_privacy_lock": ("Camera privacy lock", None),
+    "voice_privacy_lock": ("Voice privacy lock", None),
 }
 
 
@@ -32,6 +34,10 @@ class RustyBinarySensor(RustyEntity, BinarySensorEntity):
     def is_on(self) -> bool:
         if self.entity_key == "online":
             return self.device.online
+        if self.entity_key == "camera_privacy_lock":
+            return local_privacy_locked(self.device, "camera")
+        if self.entity_key == "voice_privacy_lock":
+            return local_privacy_locked(self.device, "voice_assist")
         return bool(self.device.telemetry.get(self.entity_key))
 
     @property

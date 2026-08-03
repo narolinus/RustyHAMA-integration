@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from homeassistant.exceptions import HomeAssistantError
 import pytest
 import voluptuous as vol
 
@@ -14,12 +15,14 @@ from custom_components.rustyhama.api import (
     PanelJavaScriptView,
 )
 from custom_components.rustyhama.dashboard_compiler import Compilation
+from custom_components.rustyhama.entity import local_privacy_locked
 from custom_components.rustyhama.manager import RustyManager
 from custom_components.rustyhama.merge import apply_tab_order, merge_patch, redact_secrets
 from custom_components.rustyhama.models import DeviceRecord
 from custom_components.rustyhama.protocol import envelope, validate_message
 from custom_components.rustyhama.schema import DashboardValidationError, validate_dashboard
 from custom_components.rustyhama.sensor import SENSORS, RustySensor
+from custom_components.rustyhama.switch import RustySwitch
 
 
 def test_merge_patch_vectors() -> None:
@@ -88,6 +91,39 @@ def test_dashboard_validation() -> None:
 def test_secret_redaction_is_recursive() -> None:
     value = redact_secrets({"provider": {"api_key": "secret", "name": "photos"}})
     assert value == {"provider": {"api_key": "**REDACTED**", "name": "photos"}}
+
+
+def test_live_local_privacy_locks_override_paired_capabilities() -> None:
+    """A device can lock and unlock locally without HA changing the flag."""
+    device = DeviceRecord(
+        "device",
+        "Tablet",
+        "hash",
+        "subentry",
+        capabilities={"privacy_locks": {"camera": True, "voice_assist": True}},
+    )
+    assert local_privacy_locked(device, "camera") is True
+    assert local_privacy_locked(device, "voice_assist") is True
+
+
+@pytest.mark.asyncio
+async def test_ha_cannot_enable_a_locally_locked_camera() -> None:
+    """The HA entity refuses activation while the physical device lock is set."""
+    device = DeviceRecord(
+        "device",
+        "Tablet",
+        "hash",
+        "subentry",
+        telemetry={"privacy_locks": {"camera": True}},
+    )
+    entity = RustySwitch(object(), device, "camera_enabled")
+
+    with pytest.raises(HomeAssistantError, match="local device privacy lock"):
+        await entity.async_turn_on()
+
+    device.telemetry["privacy_locks"] = {"camera": False, "voice_assist": True}
+    assert local_privacy_locked(device, "camera") is False
+    assert local_privacy_locked(device, "voice_assist") is True
 
 
 def test_panel_module_can_be_loaded_without_auth_header() -> None:
