@@ -353,7 +353,9 @@ class RustyManager:
         session.last_activity_monotonic = time.monotonic()
         device = self.storage.devices[session.device_id]
         if message["id"] in device.recent_message_ids:
-            await session.websocket.send_json(envelope("ack", {}, message_id=message["id"]))
+            await self._async_try_ws_send(
+                session, envelope("ack", {}, message_id=message["id"])
+            )
             return
         device.recent_message_ids.append(message["id"])
         device.last_seen = utc_iso()
@@ -361,7 +363,9 @@ class RustyManager:
         payload = message["payload"]
         persist = False
         if kind == "heartbeat":
-            await session.websocket.send_json(envelope("heartbeat_ack", {}, message_id=message["id"]))
+            await self._async_try_ws_send(
+                session, envelope("heartbeat_ack", {}, message_id=message["id"])
+            )
         elif kind == "telemetry":
             device.telemetry.update(payload)
             persist = True
@@ -427,11 +431,13 @@ class RustyManager:
         message = envelope(command, payload)
         future: asyncio.Future[dict[str, Any]] = self.hass.loop.create_future()
         self._pending_acks[message["id"]] = future
+        session.pending[message["id"]] = message
         try:
-            await session.websocket.send_json(message)
+            await self._async_try_ws_send(session, message)
             return await asyncio.wait_for(future, timeout)
         finally:
             self._pending_acks.pop(message["id"], None)
+            session.pending.pop(message["id"], None)
 
     async def async_push_configuration(self, device_id: str, *, force: bool = True) -> bool:
         """Send a compiled configuration and its narrow state projection."""
@@ -443,16 +449,16 @@ class RustyManager:
         compilation = self._compile(device)
         if not force and previous is not None and previous.fingerprint == compilation.fingerprint:
             return False
-        await session.websocket.send_json(
-            envelope(
-                "configuration",
-                {"config": compilation.config},
-                revision=device.config_revision,
-            )
+        configuration = envelope(
+            "configuration",
+            {"config": compilation.config},
+            revision=device.config_revision,
         )
-        await session.websocket.send_json(
-            envelope("states", {"states": self._initial_states(compilation)})
-        )
+        states = envelope("states", {"states": self._initial_states(compilation)})
+        self._queue_fallback(session, "configuration", configuration)
+        self._queue_fallback(session, "states", states)
+        await self._async_try_ws_send(session, configuration)
+        await self._async_try_ws_send(session, states)
         return True
 
     async def async_update_device_config(
@@ -475,7 +481,38 @@ class RustyManager:
         session = self.sessions.get(device_id)
         if session is None or session.websocket.closed:
             raise ConnectionError("device_unavailable")
-        await session.websocket.send_json(envelope(event, payload))
+        message = envelope(event, payload)
+        self._queue_fallback(session, f"event:{message['id']}", message)
+        await self._async_try_ws_send(session, message)
+
+    def pull_fallback_messages(self, session: DeviceSession) -> list[dict[str, Any]]:
+        """Return queued HA-to-device frames for an authenticated heartbeat poll."""
+        messages = list(session.pending.values())
+        messages.extend(session.outbox.values())
+        session.outbox.clear()
+        return messages
+
+    def _queue_fallback(
+        self, session: DeviceSession, key: str, message: dict[str, Any]
+    ) -> None:
+        session.outbox[key] = message
+        while len(session.outbox) > 64:
+            session.outbox.pop(next(iter(session.outbox)))
+
+    async def _async_try_ws_send(
+        self, session: DeviceSession, message: dict[str, Any]
+    ) -> bool:
+        """Best-effort WebSocket delivery bounded independently of HTTP polling."""
+        try:
+            await asyncio.wait_for(session.websocket.send_json(message), timeout=1.0)
+        except Exception:
+            _LOGGER.debug(
+                "RustyHAMA WebSocket delivery deferred to HTTP poll for %s",
+                session.device_id,
+                exc_info=True,
+            )
+            return False
+        return True
 
     async def async_stream(self, stream_id: str) -> AsyncIterator[bytes]:
         """Yield an authenticated logical media stream."""
@@ -610,13 +647,13 @@ class RustyManager:
             if compilation is None:
                 compilation = self._compile(device)
             if entity_id in compilation.entity_ids and not session.websocket.closed:
+                message = envelope(
+                    "state",
+                    {"state": self._json_compatible(new_state.as_dict())},
+                )
+                self._queue_fallback(session, f"state:{entity_id}", message)
                 try:
-                    await session.websocket.send_json(
-                        envelope(
-                            "state",
-                            {"state": self._json_compatible(new_state.as_dict())},
-                        )
-                    )
+                    await session.websocket.send_json(message)
                 except Exception:
                     # aiohttp can transition to closing after the closed check but
                     # before the frame write. Detach only if this is still the active
@@ -669,9 +706,9 @@ class RustyManager:
             payload = {"success": False, "error": str(err) or "request_failed"}
         else:
             payload = {"success": True, "result": self._json_compatible(result)}
-        await session.websocket.send_json(
-            envelope("request_result", payload, message_id=message["id"])
-        )
+        response = envelope("request_result", payload, message_id=message["id"])
+        self._queue_fallback(session, f"response:{message['id']}", response)
+        await self._async_try_ws_send(session, response)
 
     async def _async_execute_device_request(
         self, device: DeviceRecord, kind: str, payload: dict[str, Any]
@@ -796,13 +833,13 @@ class RustyManager:
             entity_id not in self.allowed_entities(device)
             or service not in ALLOWED_SERVICES.get(domain, frozenset())
         ):
-            await session.websocket.send_json(
-                envelope(
-                    "command_ack",
-                    {"success": False, "error": "operation_not_allowed"},
-                    message_id=message["id"],
-                )
+            response = envelope(
+                "command_ack",
+                {"success": False, "error": "operation_not_allowed"},
+                message_id=message["id"],
             )
+            self._queue_fallback(session, f"response:{message['id']}", response)
+            await self._async_try_ws_send(session, response)
             return
         data = dict(payload.get("data") or {})
         data["entity_id"] = entity_id
@@ -813,6 +850,6 @@ class RustyManager:
             result = {"success": False, "error": str(err)}
         else:
             result = {"success": True}
-        await session.websocket.send_json(
-            envelope("command_ack", result, message_id=message["id"])
-        )
+        response = envelope("command_ack", result, message_id=message["id"])
+        self._queue_fallback(session, f"response:{message['id']}", response)
+        await self._async_try_ws_send(session, response)

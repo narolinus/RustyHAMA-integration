@@ -116,6 +116,7 @@ def test_device_message_fallback_is_device_authenticated() -> None:
     assert "validate_message(raw)" in view
     assert "async_create_background_task" in view
     assert "status_code=202" in view
+    assert "pull_fallback_messages" in view
 
 
 def test_provider_proxies_preserve_android_compatibility_contract() -> None:
@@ -134,6 +135,7 @@ def test_provider_proxies_preserve_android_compatibility_contract() -> None:
     assert 'tail != "imageproxy"' in music
     assert 'tail != "api"' in music
     assert "session.post(" in music
+    assert "_external_image" in music
     downstream = music[music.index("downstream =") : music.index("await downstream.prepare")]
     assert "heartbeat=" not in downstream
 

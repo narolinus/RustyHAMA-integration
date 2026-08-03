@@ -8,6 +8,7 @@ import logging
 import time
 from pathlib import Path
 from typing import Any, ClassVar
+from urllib.parse import urlsplit
 
 import voluptuous as vol
 from aiohttp import WSMsgType, web
@@ -168,14 +169,21 @@ class DeviceMessageView(HomeAssistantView):
             # heartbeat ACK on that socket and can therefore block on transport
             # backpressure.  Returning immediately also lets command ACKs use a
             # second, healthy connection to resolve the pending HA action.
-            validate_message(raw)
+            validated = validate_message(raw)
         except (ValueError, TypeError, json.JSONDecodeError, vol.Invalid) as err:
             return self.json({"error": str(err)}, status_code=400)
         manager.hass.async_create_background_task(
             self._async_process(manager, session, raw),
             f"RustyHAMA device fallback {device.device_id}",
         )
-        return self.json({"success": True}, status_code=202)
+        messages = (
+            manager.pull_fallback_messages(session)
+            if validated["type"] == "heartbeat"
+            else []
+        )
+        return self.json(
+            {"success": True, "messages": messages}, status_code=202
+        )
 
     async def _async_process(self, manager: Any, session: Any, raw: dict[str, Any]) -> None:
         """Process a validated fallback frame without holding the HTTP response."""
@@ -357,12 +365,45 @@ class MusicAssistantProviderView(HomeAssistantView):
             return await self._websocket(request, provider)
         if tail != "imageproxy" and not tail.startswith("imageproxy/"):
             raise web.HTTPNotFound()
+        if tail == "imageproxy" and (path := request.query.get("path", "")).startswith(
+            ("http://", "https://")
+        ):
+            return await self._external_image(request, path)
         url = str(provider["url"]).rstrip("/") + "/" + tail
         headers = {"Authorization": f"Bearer {provider['token']}"}
         session = async_get_clientsession(_manager(request).hass)
         async with session.get(url, params=request.query, headers=headers) as response:
             return web.Response(
                 body=await response.read(),
+                status=response.status,
+                content_type=response.content_type,
+            )
+
+    async def _external_image(
+        self, request: web.Request, url: str
+    ) -> web.StreamResponse:
+        """Fetch an absolute MA artwork URL without exposing provider secrets."""
+        parsed = urlsplit(url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.hostname.replace(".", "").isdigit()
+            or parsed.port not in {None, 80, 443}
+        ):
+            raise web.HTTPBadRequest(text="invalid image URL")
+        session = async_get_clientsession(_manager(request).hass)
+        async with session.get(url, headers={"Accept": "image/*"}) as response:
+            content = await response.content.read(10 * 1024 * 1024 + 1)
+            if len(content) > 10 * 1024 * 1024:
+                raise web.HTTPRequestEntityTooLarge(
+                    max_size=10 * 1024 * 1024, actual_size=len(content)
+                )
+            if response.status < 400 and not response.content_type.startswith("image/"):
+                raise web.HTTPUnsupportedMediaType(
+                    text="upstream did not return an image"
+                )
+            return web.Response(
+                body=content,
                 status=response.status,
                 content_type=response.content_type,
             )
