@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import logging
 from typing import Any
-from urllib.parse import urlsplit
 
 from aiohttp import ClientError, ClientTimeout
 from homeassistant.components.camera import Camera, CameraEntityFeature
@@ -13,12 +12,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .camera_url import validated_direct_snapshot_url
 from .entity import RustyEntity, async_setup_dynamic_entities
 from .models import DeviceRecord
 
 _LOGGER = logging.getLogger(__name__)
 _MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024
-_DIRECT_CAMERA_PORT = 8765
 
 
 class RustyCamera(RustyEntity, Camera):
@@ -87,27 +86,7 @@ class RustyCamera(RustyEntity, Camera):
 
     def _direct_snapshot_url(self) -> str | None:
         """Return a validated direct snapshot URL advertised by this device."""
-        cameras = self.device.telemetry.get("cameras", {})
-        data = cameras.get(self.camera_id, {}) if isinstance(cameras, dict) else {}
-        url = data.get("snapshot_url") if isinstance(data, dict) else None
-        device_ip = self.device.telemetry.get("ip_address")
-        if (
-            not isinstance(url, str)
-            or not isinstance(device_ip, str)
-            or data.get("transport") != "direct"
-        ):
-            return None
-        parsed = urlsplit(url)
-        if (
-            parsed.scheme != "http"
-            or parsed.hostname != device_ip
-            or parsed.port != _DIRECT_CAMERA_PORT
-            or not parsed.path.startswith(f"/device_camera/{self.camera_id}/")
-            or parsed.username is not None
-            or parsed.password is not None
-        ):
-            return None
-        return url
+        return validated_direct_snapshot_url(self.device.telemetry, self.camera_id)
 
     async def stream_source(self) -> str | None:
         """Return a direct pinned LAN URL when the device advertises one."""
