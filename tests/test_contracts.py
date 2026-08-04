@@ -21,6 +21,7 @@ from custom_components.rustyhama.models import DeviceRecord
 from custom_components.rustyhama.protocol import envelope, validate_message
 from custom_components.rustyhama.schema import DashboardValidationError, validate_dashboard
 from custom_components.rustyhama.sensor import SENSORS, RustySensor
+from custom_components.rustyhama.select import WakeWordSelect
 from custom_components.rustyhama.switch import RustySwitch
 
 
@@ -125,18 +126,50 @@ async def test_ha_cannot_enable_a_locally_locked_camera() -> None:
     assert local_privacy_locked(device, "voice_assist") is True
 
 
+@pytest.mark.asyncio
+async def test_device_wake_word_select_publishes_selected_model() -> None:
+    """Every paired device has an explicit server wake-word selector."""
+    device = DeviceRecord("device", "Tablet", "hash", "subentry")
+
+    class Storage:
+        @staticmethod
+        def effective_config(_device: DeviceRecord) -> dict[str, object]:
+            return {"voice_assistant": {"active_wake_words": ["okay_nabu"]}}
+
+    class Manager:
+        storage = Storage()
+
+        def __init__(self) -> None:
+            self.patch: dict[str, object] | None = None
+
+        async def async_update_device_config(
+            self, _device_id: str, patch: dict[str, object]
+        ) -> None:
+            self.patch = patch
+
+    manager = Manager()
+    entity = WakeWordSelect(manager, device)
+    entity._attr_options = ["okay_nabu", "hey_jarvis"]
+
+    assert entity.current_option == "okay_nabu"
+    await entity.async_select_option("hey_jarvis")
+    assert manager.patch == {
+        "voice_assistant": {"active_wake_words": ["hey_jarvis"]}
+    }
+
+
 def test_panel_module_can_be_loaded_without_auth_header() -> None:
     assert PanelJavaScriptView.requires_auth is False
     assert PanelFontView.requires_auth is False
     assert Path("custom_components/rustyhama/frontend/MaterialSymbolsOutlined.ttf").is_file()
 
 
-def test_device_control_channel_has_bounded_transport_heartbeat() -> None:
-    """The proxy detects dead transports while protocol heartbeat owns state."""
+def test_device_control_channel_uses_only_protocol_heartbeat() -> None:
+    """Transport pings must not compete with the protocol liveness check."""
     source = Path("custom_components/rustyhama/api.py").read_text()
     control_view = source[source.index("class DeviceWebSocketView") : source.index("class DeviceStreamView")]
     assert "WebSocketResponse(" in control_view
-    assert "heartbeat=15" in control_view
+    assert "heartbeat=" not in control_view
     assert DeviceWebSocketView.requires_auth is False
 
 
@@ -167,7 +200,7 @@ def test_provider_proxies_preserve_android_compatibility_contract() -> None:
     assert "session.post(" in music
     assert "_external_image" in music
     downstream = music[music.index("downstream =") : music.index("await downstream.prepare")]
-    assert "heartbeat=15" in downstream
+    assert "heartbeat=" not in downstream
 
 
 def test_initial_states_are_json_serializable() -> None:

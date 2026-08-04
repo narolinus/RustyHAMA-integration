@@ -93,11 +93,10 @@ class DeviceWebSocketView(HomeAssistantView):
         device = manager.authenticate(device_id, credential)
         if device is None:
             raise web.HTTPUnauthorized()
-        # Keep the upgraded connection active through reverse proxies. The
-        # versioned application heartbeat remains the authoritative online state.
-        websocket = web.WebSocketResponse(
-            heartbeat=15, max_msg_size=4 * 1024 * 1024
-        )
+        # The versioned application heartbeat is the sole liveness authority.
+        # Active transport pings proved unreliable on the legacy Android path and
+        # must not tear down a socket that still carries application frames.
+        websocket = web.WebSocketResponse(max_msg_size=4 * 1024 * 1024)
         await websocket.prepare(request)
         session = None
         try:
@@ -384,9 +383,7 @@ class MusicAssistantProviderView(HomeAssistantView):
     async def _websocket(
         self, request: web.Request, provider: dict[str, Any]
     ) -> web.StreamResponse:
-        downstream = web.WebSocketResponse(
-            heartbeat=15, max_msg_size=4 * 1024 * 1024
-        )
+        downstream = web.WebSocketResponse(max_msg_size=4 * 1024 * 1024)
         await downstream.prepare(request)
         base = str(provider["url"]).rstrip("/")
         upstream_url = base.replace("https://", "wss://").replace("http://", "ws://")
@@ -396,7 +393,6 @@ class MusicAssistantProviderView(HomeAssistantView):
         async with session.ws_connect(
             upstream_url,
             headers={"Authorization": f"Bearer {provider['token']}"},
-            heartbeat=15,
         ) as upstream:
             async def device_to_provider() -> None:
                 async for item in downstream:

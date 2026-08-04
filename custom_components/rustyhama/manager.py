@@ -487,7 +487,7 @@ class RustyManager:
     ) -> bool:
         """Deliver over the sole control channel or retire that failed session."""
         try:
-            await asyncio.wait_for(session.websocket.send_json(message), timeout=1.0)
+            await session.websocket.send_json(message)
         except Exception as err:
             _LOGGER.warning(
                 "RustyHAMA WebSocket delivery failed for %s; closing session",
