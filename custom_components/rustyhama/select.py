@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from homeassistant.components import wake_word
-from homeassistant.components.assist_pipeline import async_get_pipeline
 from homeassistant.components.select import SelectEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
@@ -113,6 +111,11 @@ class WakeWordSelect(RustyEntity, SelectEntity):
         )
 
     async def _async_refresh_options(self) -> None:
+        # Keep the select platform importable in HACS' lightweight test
+        # environment, which does not install Assist's optional NLP packages.
+        from homeassistant.components import wake_word
+        from homeassistant.components.assist_pipeline import async_get_pipeline
+
         try:
             pipeline = async_get_pipeline(self.hass, pipeline_id=None)
             entity_id = pipeline.wake_word_entity or wake_word.async_default_entity(
