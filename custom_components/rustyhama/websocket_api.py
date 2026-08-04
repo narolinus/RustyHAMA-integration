@@ -83,6 +83,32 @@ async def ws_create_pairing(hass: HomeAssistant, connection: Any, msg: dict[str,
 @websocket_api.require_admin
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "rustyhama/create_repairing",
+        vol.Required("device_id"): str,
+        vol.Optional("certificate_fingerprint"): str,
+        vol.Optional("public_key_pin"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_create_repairing(
+    hass: HomeAssistant, connection: Any, msg: dict[str, Any]
+) -> None:
+    """Create a pairing authorization for an existing device record."""
+    try:
+        result = await _manager(hass).async_create_repairing(
+            msg["device_id"],
+            certificate_fingerprint=msg.get("certificate_fingerprint"),
+            public_key_pin=msg.get("public_key_pin"),
+        )
+    except KeyError:
+        connection.send_error(msg["id"], "unknown_device", "Device not found")
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "rustyhama/save_profile",
         vol.Required("profile_id"): str,
         vol.Required("name"): str,
@@ -281,6 +307,7 @@ COMMANDS = (
     ws_get_snapshot,
     ws_compile_preview,
     ws_create_pairing,
+    ws_create_repairing,
     ws_save_profile,
     ws_delete_profile,
     ws_publish_profile,

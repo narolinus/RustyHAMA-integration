@@ -91,6 +91,8 @@ test('pairing creates a QR element using its data property', () => {
   assert.match(panel, /document\.createElement\('ha-qr-code'\)/);
   assert.match(panel, /qrCode\.data=qr/);
   assert.match(panel, /public_key_pin/);
+  assert.match(panel, /create_repairing/);
+  assert.match(panel, /data-device-repair/);
 });
 
 test('preview loads the bundled Material Symbols font', () => {

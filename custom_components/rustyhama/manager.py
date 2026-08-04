@@ -175,6 +175,7 @@ class RustyManager:
         area_id: str | None,
         certificate_fingerprint: str | None = None,
         public_key_pin: str | None = None,
+        device_id: str | None = None,
     ) -> dict[str, Any]:
         """Create a short-lived manual and QR pairing authorization."""
         self._purge_pairings()
@@ -189,6 +190,7 @@ class RustyManager:
             profile_id=profile_id,
             area_id=area_id,
             expires_at=time.time() + PAIR_TTL_SECONDS,
+            device_id=device_id,
         )
         self.pairings[request.code_hash] = request
         return {
@@ -199,6 +201,24 @@ class RustyManager:
             "certificate_fingerprint": certificate_fingerprint or "",
             "public_key_pin": public_key_pin or "",
         }
+
+    async def async_create_repairing(
+        self,
+        device_id: str,
+        *,
+        certificate_fingerprint: str | None = None,
+        public_key_pin: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a one-time authorization that replaces one device credential."""
+        device = self.storage.devices[device_id]
+        return await self.async_create_pairing(
+            name=device.name,
+            profile_id=device.profile_id,
+            area_id=device.area_id,
+            certificate_fingerprint=certificate_fingerprint,
+            public_key_pin=public_key_pin,
+            device_id=device_id,
+        )
 
     async def async_complete_pairing(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Consume a pairing request and register a device subentry."""
@@ -223,8 +243,11 @@ class RustyManager:
             self.pairings.pop(pair_key, None)
             raise PermissionError("pairing_expired")
 
-        device_id = uuid4().hex
         credential = secrets.token_urlsafe(DEVICE_TOKEN_BYTES)
+        if pairing.device_id is not None:
+            return await self._async_complete_repairing(pairing, credential, payload)
+
+        device_id = uuid4().hex
         subentry = ConfigSubentry(
             data=MappingProxyType(
                 {
@@ -271,6 +294,99 @@ class RustyManager:
             "credential": credential,
             "config_revision": device.config_revision,
             "config": self._compile(device).config,
+        }
+
+    async def _async_complete_repairing(
+        self,
+        pairing: PairingRequest,
+        credential: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Replace credentials while preserving the existing HA device and settings."""
+        device_id = pairing.device_id
+        if device_id is None:
+            raise RuntimeError("repairing_without_device")
+        device = self.storage.devices.get(device_id)
+        if device is None:
+            self.pairings = {
+                key: request
+                for key, request in self.pairings.items()
+                if request is not pairing
+            }
+            raise PermissionError("repairing_device_removed")
+
+        prior = (
+            device.token_hash,
+            device.capabilities,
+            device.display,
+            device.telemetry,
+            device.acknowledged_revision,
+            device.online,
+            device.last_seen,
+        )
+        device.token_hash = token_hash(credential)
+        if "capabilities" in payload:
+            device.capabilities = dict(payload.get("capabilities") or {})
+        if "display" in payload:
+            device.display = dict(payload.get("display") or {})
+        # Telemetry and acknowledgement describe the removed installation, not
+        # the preserved HA-side configuration of its replacement.
+        device.telemetry = {}
+        device.acknowledged_revision = 0
+        device.online = False
+        device.last_seen = utc_iso()
+        try:
+            self._compiled.pop(device_id, None)
+            compilation = self._compile(device)
+            await self.storage.async_save()
+        except Exception:
+            (
+                device.token_hash,
+                device.capabilities,
+                device.display,
+                device.telemetry,
+                device.acknowledged_revision,
+                device.online,
+                device.last_seen,
+            ) = prior
+            self._compiled.pop(device_id, None)
+            raise
+
+        # Whichever authorization succeeds first is authoritative. Invalidate all
+        # other outstanding re-pairing codes for this device so an older code
+        # cannot unexpectedly rotate the newly installed app's credential again.
+        self.pairings = {
+            key: request
+            for key, request in self.pairings.items()
+            if request.device_id != device_id
+        }
+        device.recent_message_ids.clear()
+        session = self.sessions.pop(device_id, None)
+        watchdog = self._watchdog_tasks.pop(device_id, None)
+        if watchdog is not None:
+            watchdog.cancel()
+        refresh = self._refresh_tasks.pop(device_id, None)
+        if refresh is not None:
+            refresh.cancel()
+        if session is not None and not session.websocket.closed:
+            try:
+                await session.websocket.close(code=4003, message=b"re-paired")
+            except Exception:
+                # The new credential is already durable. A broken old transport
+                # must not prevent the fresh installation from receiving it.
+                _LOGGER.warning(
+                    "Could not close old RustyHAMA session after re-pairing %s",
+                    device_id,
+                    exc_info=True,
+                )
+        self._signal_device(device_id)
+        async_dispatcher_send(self.hass, SIGNAL_DEVICES_CHANGED)
+        return {
+            "protocol_version": 1,
+            "device_id": device_id,
+            "credential": credential,
+            "config_revision": device.config_revision,
+            "config": compilation.config,
         }
 
     def authenticate(self, device_id: str, credential: str) -> DeviceRecord | None:

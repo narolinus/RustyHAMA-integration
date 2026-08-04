@@ -76,6 +76,7 @@ class PairingRequest:
     profile_id: str
     area_id: str | None
     expires_at: float
+    device_id: str | None = None
     attempts: int = 0
 
 
