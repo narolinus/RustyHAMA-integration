@@ -20,8 +20,8 @@ from custom_components.rustyhama.merge import apply_tab_order, merge_patch, reda
 from custom_components.rustyhama.models import DeviceRecord
 from custom_components.rustyhama.protocol import envelope, validate_message
 from custom_components.rustyhama.schema import DashboardValidationError, validate_dashboard
-from custom_components.rustyhama.sensor import SENSORS, RustySensor
 from custom_components.rustyhama.select import WakeWordSelect
+from custom_components.rustyhama.sensor import SENSORS, RustySensor
 from custom_components.rustyhama.switch import RustySwitch
 
 
