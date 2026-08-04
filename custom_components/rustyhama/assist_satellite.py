@@ -189,7 +189,26 @@ class RustyAssistSatellite(RustyEntity, AssistSatelliteEntity):
         timed_iterator = timed_audio().__aiter__()
         result = await engine.async_process_audio_stream(timed_iterator, wake_word_id)
         if result is None:
+            # A closed/lost detector stream must release Android so it can open a
+            # fresh wake-word session. Without terminal events the device remains
+            # attached to this dead stream forever and never recognizes again.
+            await self._async_forward_event(
+                "error",
+                {
+                    "code": "wake-word-timeout",
+                    "message": "Wake word detection ended without a match",
+                },
+            )
+            await self._async_forward_event("run-end", {})
             return
+
+        await self._async_forward_event(
+            "wake-word-end",
+            {
+                "wake_word_id": result.wake_word_id,
+                "wake_word_phrase": result.wake_word_phrase,
+            },
+        )
 
         async def speech_audio() -> AsyncIterator[bytes]:
             for chunk, _timestamp in result.queued_audio or []:

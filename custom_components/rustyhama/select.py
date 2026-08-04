@@ -44,12 +44,27 @@ class RustySelect(RustyEntity, SelectEntity):
 
     @property
     def current_option(self) -> str:
+        if self.entity_key == "active_tab":
+            tabs = self.options
+            active_index = self.device.telemetry.get("active_tab_index")
+            if isinstance(active_index, int) and 0 <= active_index < len(tabs):
+                return tabs[active_index]
         config = self.manager.storage.effective_config(self.device)
         return str(nested_value(config, self.path, self.default))
 
     async def async_select_option(self, option: str) -> None:
         if option not in self.options:
             raise ValueError(f"Unsupported option: {option}")
+        if self.entity_key == "active_tab":
+            # The active tab is live device state, not dashboard configuration.
+            # A configuration publication rebuilds the Android dashboard and can
+            # arrive seconds after the requested interaction. Send the typed
+            # command on the authoritative control WebSocket instead; the next
+            # immediate telemetry update becomes the select's single truth.
+            await self.manager.async_send_command(
+                self.device.device_id, "set_active_tab", {"tab_id": option}
+            )
+            return
         await self.manager.async_update_device_config(
             self.device.device_id, nested_patch(self.path, option)
         )

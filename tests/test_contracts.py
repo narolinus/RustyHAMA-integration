@@ -20,7 +20,7 @@ from custom_components.rustyhama.merge import apply_tab_order, merge_patch, reda
 from custom_components.rustyhama.models import DeviceRecord
 from custom_components.rustyhama.protocol import envelope, validate_message
 from custom_components.rustyhama.schema import DashboardValidationError, validate_dashboard
-from custom_components.rustyhama.select import WakeWordSelect
+from custom_components.rustyhama.select import RustySelect, WakeWordSelect
 from custom_components.rustyhama.sensor import SENSORS, RustySensor
 from custom_components.rustyhama.switch import RustySwitch
 
@@ -156,6 +156,67 @@ async def test_device_wake_word_select_publishes_selected_model() -> None:
     assert manager.patch == {
         "voice_assistant": {"active_wake_words": ["hey_jarvis"]}
     }
+
+
+@pytest.mark.asyncio
+async def test_active_tab_select_uses_live_state_and_direct_command() -> None:
+    """Active tab has one truth and never republishes the dashboard."""
+    device = DeviceRecord(
+        "device",
+        "Tablet",
+        "hash",
+        "subentry",
+        telemetry={"active_tab_index": 1, "active_tab": "Calendar"},
+    )
+
+    class Storage:
+        @staticmethod
+        def effective_config(_device: DeviceRecord) -> dict[str, object]:
+            return {
+                "runtime": {"active_tab": "overview"},
+                "tabs": [{"id": "overview"}, {"id": "calendar"}],
+            }
+
+    class Manager:
+        storage = Storage()
+
+        def __init__(self) -> None:
+            self.command: tuple[str, str, dict[str, str]] | None = None
+            self.patch: dict[str, object] | None = None
+
+        async def async_send_command(
+            self, device_id: str, command: str, payload: dict[str, str]
+        ) -> dict[str, bool]:
+            self.command = (device_id, command, payload)
+            return {"success": True}
+
+        async def async_update_device_config(
+            self, _device_id: str, patch: dict[str, object]
+        ) -> None:
+            self.patch = patch
+
+    manager = Manager()
+    entity = RustySelect(manager, device, "active_tab")
+
+    assert entity.current_option == "calendar"
+    await entity.async_select_option("overview")
+    assert manager.command == (
+        "device",
+        "set_active_tab",
+        {"tab_id": "overview"},
+    )
+    assert manager.patch is None
+
+
+def test_wake_word_stream_without_match_releases_device() -> None:
+    """A dead wake-word stream must not strand Android in the old session."""
+    source = Path("custom_components/rustyhama/assist_satellite.py").read_text()
+    no_match = source[
+        source.index("if result is None:") : source.index("async def speech_audio")
+    ]
+    assert '"wake-word-timeout"' in no_match
+    assert '_async_forward_event("run-end", {})' in no_match
+    assert '"wake-word-end"' in no_match
 
 
 def test_panel_module_can_be_loaded_without_auth_header() -> None:
